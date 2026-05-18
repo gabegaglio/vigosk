@@ -5,7 +5,7 @@
 
 set -eu
 
-VERSION="0.1.0"
+VERSION="0.1.2"
 PROG="$(basename "$0")"
 
 # Resolve install location: <prefix>/bin/vigosk → <prefix>/share/vigosk
@@ -24,7 +24,9 @@ HOST="${VIGOSK_HOST:-127.0.0.1}"
 PORT="${VIGOSK_PORT:-8765}"
 BROWSER="${VIGOSK_BROWSER:-}"
 SERVER_ONLY=0
+KIOSK=0
 NO_CLEAR=0
+OS="$(uname -s)"
 
 print_logo() {
   if [ -f "$SHARE/assets/logo.txt" ]; then
@@ -47,13 +49,19 @@ usage() {
     -v, --version        print version and exit
     -p, --port PORT      bind port for the metrics server   [default: 8765]
         --host HOST      bind address                       [default: 127.0.0.1]
-        --server-only    start the server but don't launch chromium
+        --kiosk          fullscreen chromium kiosk mode (for dedicated panels)
+        --server-only    start the server but don't open a browser
         --no-clear       don't use the terminal alt-screen buffer
         --braille-logo   print the braille V-TERM easter-egg logo and exit
 
+  DEFAULT
+    Starts the server and opens the dashboard in your default browser
+    (macOS: `open`, Linux: `xdg-open`). Use --kiosk for the locked-down
+    fullscreen experience on dedicated kiosk panels.
+
   ENVIRONMENT
     VIGOSK_HOME          override install location
-    VIGOSK_BROWSER       browser binary to launch          [default: chromium]
+    VIGOSK_BROWSER       browser binary to launch (overrides auto-detect)
     VIGOSK_HOST          same as --host
     VIGOSK_PORT          same as --port
 
@@ -76,6 +84,7 @@ while [ $# -gt 0 ]; do
     -v|--version) echo "vigosk $VERSION"; exit 0 ;;
     -p|--port) PORT="${2:?--port needs a value}"; shift 2 ;;
     --host) HOST="${2:?--host needs a value}"; shift 2 ;;
+    --kiosk) KIOSK=1; shift ;;
     --server-only) SERVER_ONLY=1; shift ;;
     --no-clear) NO_CLEAR=1; shift ;;
     --braille-logo) cat "$SHARE/assets/logo-braille.txt"; exit 0 ;;
@@ -83,13 +92,22 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-if [ -z "$BROWSER" ]; then
-  if command -v chromium >/dev/null 2>&1; then BROWSER=chromium
-  elif command -v chromium-browser >/dev/null 2>&1; then BROWSER=chromium-browser
-  elif command -v google-chrome >/dev/null 2>&1; then BROWSER=google-chrome
-  else BROWSER=""
+# Chromium-style binary, used only when --kiosk is requested.
+detect_chromium() {
+  if [ -n "$BROWSER" ]; then echo "$BROWSER"; return; fi
+  for cmd in chromium chromium-browser google-chrome google-chrome-stable brave-browser; do
+    if command -v "$cmd" >/dev/null 2>&1; then echo "$cmd"; return; fi
+  done
+  if [ "$OS" = "Darwin" ]; then
+    for app in "Google Chrome" "Chromium" "Brave Browser" "Microsoft Edge"; do
+      if [ -d "/Applications/$app.app" ]; then
+        echo "/Applications/$app.app/Contents/MacOS/$app"
+        return
+      fi
+    done
   fi
-fi
+  echo ""
+}
 
 ALT_SCREEN=0
 SERVER_PID=""
@@ -153,25 +171,42 @@ if ! curl -fsS --max-time 0.5 "http://$HOST:$PORT/api/stats" >/dev/null 2>&1; th
   fail "metrics.py did not bind $HOST:$PORT within 5 seconds"
 fi
 
+URL="http://$HOST:$PORT"
+
 if [ "$SERVER_ONLY" -eq 1 ]; then
-  printf '  server-only — visit http://%s:%s\n  Ctrl+C to stop.\n' "$HOST" "$PORT"
+  printf '  server-only — visit %s\n  Ctrl+C to stop.\n' "$URL"
   wait "$SERVER_PID"
   exit 0
 fi
 
-if [ -z "$BROWSER" ]; then
-  printf '\033[33m!\033[0m no chromium/chrome found. Open http://%s:%s manually, or re-run with --server-only.\n' "$HOST" "$PORT"
-  wait "$SERVER_PID"
+if [ "$KIOSK" -eq 1 ]; then
+  # Dedicated-panel mode: chromium fullscreen.
+  BROWSER="$(detect_chromium)"
+  if [ -z "$BROWSER" ]; then
+    fail "no chromium/chrome found for --kiosk mode. Install chromium, or omit --kiosk to use your default browser."
+  fi
+  printf '  launching %s --kiosk → %s\n' "$BROWSER" "$URL"
+  CHROMIUM_FLAGS="--kiosk --noerrdialogs --disable-infobars --no-first-run --check-for-update-interval=31536000 --overscroll-history-navigation=0 --disable-pinch --disable-session-crashed-bubble"
+  if [ "$(id -u)" -eq 0 ]; then
+    CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox"
+  fi
+  "$BROWSER" $CHROMIUM_FLAGS "$URL" >/dev/null 2>&1 || true
   exit 0
 fi
 
-printf '  launching %s --kiosk → http://%s:%s\n' "$BROWSER" "$HOST" "$PORT"
-
-CHROMIUM_FLAGS="--kiosk --noerrdialogs --disable-infobars --no-first-run --check-for-update-interval=31536000 --overscroll-history-navigation=0 --disable-pinch --disable-session-crashed-bubble"
-
-# chromium running as root needs --no-sandbox
-if [ "$(id -u)" -eq 0 ]; then
-  CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox"
+# Default: open in the user's default browser.
+if [ -n "$BROWSER" ]; then
+  printf '  opening %s in %s\n' "$URL" "$BROWSER"
+  "$BROWSER" "$URL" >/dev/null 2>&1 &
+elif [ "$OS" = "Darwin" ] && command -v open >/dev/null 2>&1; then
+  printf '  opening %s in your default browser\n' "$URL"
+  open "$URL"
+elif command -v xdg-open >/dev/null 2>&1; then
+  printf '  opening %s in your default browser\n' "$URL"
+  xdg-open "$URL" >/dev/null 2>&1 &
+else
+  printf '\033[33m!\033[0m no browser launcher found. Visit %s manually.\n' "$URL"
 fi
 
-"$BROWSER" $CHROMIUM_FLAGS "http://$HOST:$PORT" >/dev/null 2>&1 || true
+printf '  server running. Ctrl+C to stop.\n'
+wait "$SERVER_PID"
