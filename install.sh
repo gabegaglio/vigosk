@@ -37,6 +37,36 @@ need curl
 need tar
 need python3
 
+# psutil is required by metrics.py — try to install via the distro package
+# first (cleanest, no pip), fall back to pip --user, otherwise instruct.
+if ! python3 -c "import psutil" >/dev/null 2>&1; then
+  printf 'installing psutil (required by metrics.py)...\n'
+  installed=0
+  if [ "$(id -u)" -eq 0 ] && command -v apt-get >/dev/null 2>&1; then
+    apt-get install -y python3-psutil >/dev/null 2>&1 && installed=1
+  elif [ "$(id -u)" -eq 0 ] && command -v dnf >/dev/null 2>&1; then
+    dnf install -y python3-psutil >/dev/null 2>&1 && installed=1
+  elif [ "$(id -u)" -eq 0 ] && command -v pacman >/dev/null 2>&1; then
+    pacman -S --noconfirm python-psutil >/dev/null 2>&1 && installed=1
+  fi
+  if [ "$installed" -eq 0 ] && command -v pip3 >/dev/null 2>&1; then
+    if [ "$(id -u)" -eq 0 ]; then
+      pip3 install --break-system-packages psutil >/dev/null 2>&1 && installed=1 \
+        || pip3 install psutil >/dev/null 2>&1 && installed=1
+    else
+      pip3 install --user psutil >/dev/null 2>&1 && installed=1
+    fi
+  fi
+  if [ "$installed" -eq 0 ] || ! python3 -c "import psutil" >/dev/null 2>&1; then
+    printf '\033[31m✗\033[0m could not install psutil. Install it manually:\n' >&2
+    printf '    debian/ubuntu:  apt install python3-psutil\n' >&2
+    printf '    fedora/rhel:    dnf install python3-psutil\n' >&2
+    printf '    arch:           pacman -S python-psutil\n' >&2
+    printf '    via pip:        pip3 install --user psutil\n' >&2
+    exit 1
+  fi
+fi
+
 if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1; then
   printf '\033[33m!\033[0m chromium not found — vigosk will only run in --server-only mode\n'
 fi

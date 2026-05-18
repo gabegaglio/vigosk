@@ -94,14 +94,32 @@ fi
 ALT_SCREEN=0
 SERVER_PID=""
 
+leave_alt_screen() {
+  if [ "$ALT_SCREEN" -eq 1 ]; then
+    printf '\033[?1049l'
+    ALT_SCREEN=0
+  fi
+}
+
 cleanup() {
   if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
   fi
-  [ "$ALT_SCREEN" -eq 1 ] && printf '\033[?1049l'
+  leave_alt_screen
 }
 trap cleanup EXIT INT TERM HUP
+
+# Exit the alt-screen first so the error is visible after we exit.
+fail() {
+  leave_alt_screen
+  printf '\033[31m✗\033[0m %s\n' "$1" >&2
+  if [ -s /tmp/vigosk-server.log ]; then
+    printf 'metrics.py log tail:\n' >&2
+    tail -n 20 /tmp/vigosk-server.log >&2
+  fi
+  exit 1
+}
 
 if [ "$NO_CLEAR" -eq 0 ] && [ -t 1 ]; then
   printf '\033[?1049h\033[H'
@@ -110,6 +128,11 @@ fi
 
 print_logo
 printf '  vigosk %s — starting metrics server on %s:%s\n' "$VERSION" "$HOST" "$PORT"
+
+# Pre-flight: psutil is the most common missing dep on a fresh box.
+if ! python3 -c "import psutil" >/dev/null 2>&1; then
+  fail "python3-psutil is not installed. Run: apt install python3-psutil  (or: pip3 install --user psutil)"
+fi
 
 VIGOSK_HOST="$HOST" VIGOSK_PORT="$PORT" python3 "$SHARE/metrics.py" >/tmp/vigosk-server.log 2>&1 &
 SERVER_PID=$!
@@ -121,11 +144,14 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
   fi
   sleep 0.5
   if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-    printf '\033[31m✗\033[0m metrics.py exited early. Log tail:\n' >&2
-    tail -n 20 /tmp/vigosk-server.log >&2 || true
-    exit 1
+    fail "metrics.py exited before binding to $HOST:$PORT"
   fi
 done
+
+# After the loop: if we still cannot reach it, give up with the same error path.
+if ! curl -fsS --max-time 0.5 "http://$HOST:$PORT/api/stats" >/dev/null 2>&1; then
+  fail "metrics.py did not bind $HOST:$PORT within 5 seconds"
+fi
 
 if [ "$SERVER_ONLY" -eq 1 ]; then
   printf '  server-only — visit http://%s:%s\n  Ctrl+C to stop.\n' "$HOST" "$PORT"
