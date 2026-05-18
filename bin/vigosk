@@ -5,7 +5,7 @@
 
 set -eu
 
-VERSION="0.1.4"
+VERSION="0.1.5"
 PROG="$(basename "$0")"
 
 # Resolve install location: <prefix>/bin/vigosk → <prefix>/share/vigosk
@@ -187,13 +187,24 @@ if [ "$KIOSK" -eq 1 ]; then
   fi
   printf '  launching %s --kiosk → %s\n' "$BROWSER" "$URL"
   CHROMIUM_FLAGS="--kiosk --noerrdialogs --disable-infobars --no-first-run --check-for-update-interval=31536000 --overscroll-history-navigation=0 --disable-pinch --disable-session-crashed-bubble"
+
+  # Force a dedicated Chrome instance with its own profile. Without this,
+  # on macOS the chrome binary detects an existing Chrome.app session,
+  # forwards the URL to it, and exits immediately — the wrapper then
+  # tears down the metrics server before Chrome can connect, and the
+  # window ends up at "refused to connect". A dedicated --user-data-dir
+  # forces a fresh, separate process the wrapper can wait on. Same trick
+  # kiosk.sh uses on dev1 with /var/lib/screen-chromium.
+  KIOSK_PROFILE="${TMPDIR:-/tmp}/vigosk-kiosk-profile"
+  mkdir -p "$KIOSK_PROFILE"
+  CHROMIUM_FLAGS="$CHROMIUM_FLAGS --user-data-dir=$KIOSK_PROFILE"
+
   if [ "$(id -u)" -eq 0 ]; then
     CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox"
   fi
-  # On macOS, Chrome's --kiosk alone still allows the system menu bar
-  # to appear on mouse-hover. Combining with --app=URL makes Chrome
-  # render in chromeless app-window mode — no tabs, no omnibox, no
-  # window decorations — matching dev1's Linux kiosk experience.
+
+  # On macOS, combining --kiosk with --app=URL renders in chromeless
+  # app-window mode (no tabs, no omnibox) matching dev1's Linux kiosk.
   if [ "$OS" = "Darwin" ]; then
     "$BROWSER" $CHROMIUM_FLAGS --app="$URL" >/dev/null 2>&1 || true
   else
