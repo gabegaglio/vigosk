@@ -43,27 +43,44 @@ fi
 
 if [ "$VERSION" = "latest" ]; then
   printf 'resolving latest release of %s...\n' "$REPO"
-  VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
+  resolved=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
     | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' \
     | head -n1)
-  if [ -z "${VERSION:-}" ]; then
-    printf '\033[31m✗\033[0m failed to resolve latest release. Is the repo public? Are there any releases yet?\n' >&2
-    printf '  fallback: install from main with VIGOSK_VERSION=main\n' >&2
-    exit 1
+  if [ -n "${resolved:-}" ]; then
+    VERSION="$resolved"
+  else
+    printf '\033[33m!\033[0m no published releases yet — falling back to the main branch.\n' >&2
+    VERSION=main
   fi
 fi
 
-TARBALL="vigosk-$VERSION.tar.gz"
-URL="https://github.com/$REPO/releases/download/v$VERSION/$TARBALL"
+# Pick the right URL based on whether VERSION names a release or a branch.
+# Anything that looks like X.Y.Z is treated as a release tag (e.g. 0.1.0);
+# everything else (main, master, a feature branch, a commit ref) is fetched
+# from the GitHub archive endpoint.
+case "$VERSION" in
+  [0-9]*.[0-9]*.[0-9]*|v[0-9]*.[0-9]*.[0-9]*)
+    TAG="${VERSION#v}"
+    TARBALL="vigosk-$TAG.tar.gz"
+    URL="https://github.com/$REPO/releases/download/v$TAG/$TARBALL"
+    SOURCE_LABEL="release v$TAG"
+    ;;
+  *)
+    TARBALL="vigosk-$VERSION.tar.gz"
+    URL="https://github.com/$REPO/archive/refs/heads/$VERSION.tar.gz"
+    SOURCE_LABEL="branch $VERSION"
+    ;;
+esac
 
-printf 'installing vigosk %s → %s\n' "$VERSION" "$PREFIX"
+printf 'installing vigosk (%s) → %s\n' "$SOURCE_LABEL" "$PREFIX"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT INT TERM
 
 printf 'downloading %s...\n' "$URL"
 if ! curl -fsSL "$URL" -o "$TMP/$TARBALL"; then
-  printf '\033[31m✗\033[0m download failed. Check that release v%s exists at https://github.com/%s/releases\n' "$VERSION" "$REPO" >&2
+  printf '\033[31m✗\033[0m download failed: %s\n' "$URL" >&2
+  printf '  for branch installs, try: VIGOSK_VERSION=main curl ... | sh\n' >&2
   exit 1
 fi
 
