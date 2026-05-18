@@ -19,6 +19,14 @@
   --ghost:     #3a4659;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; text-shadow: none !important; }
+
+/* The HTML5 `hidden` attribute is implemented via the user-agent
+   stylesheet (`display: none`), so any author rule like `.gauge {
+   display: flex }` overrides it via specificity and the "hidden"
+   element keeps rendering — empty. Force [hidden] to win project-wide
+   so things like the GPU gauge actually disappear on hosts without
+   a GPU and don't claim a grid slot. */
+[hidden] { display: none !important; }
 html, body {
   width: 100vw; height: 100vh; overflow: hidden;
   background: var(--bg); color: var(--fg);
