@@ -1,0 +1,19 @@
+# Old backups kept locally during the vterm → vigosk rebrand. Not history.
+*.bak
+*.bak2
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Editor / OS noise
+.DS_Store
+*.swp
+*.swo
+
+# Logs that occasionally land in the source tree
+*.log
+
+# Release build output (CI writes here)
+/dist/

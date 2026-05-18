@@ -1,0 +1,58 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          version="${tag#v}"
+          echo "tag=$tag"         >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp version into the launcher
+        run: |
+          sed -i "s/^VERSION=\".*\"/VERSION=\"${{ steps.version.outputs.version }}\"/" bin/vigosk
+
+      - name: Build tarball
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          name="vigosk-$v"
+          mkdir -p "dist/$name"
+          # Copy the source tree, excluding noise.
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'dist' \
+            --exclude '__pycache__' \
+            --exclude '*.bak' \
+            --exclude '*.bak2' \
+            --exclude '*.pyc' \
+            ./ "dist/$name/"
+          tar -czf "dist/$name.tar.gz" -C dist "$name"
+          ( cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256" )
+          ls -la dist/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          tag="${{ steps.version.outputs.tag }}"
+          gh release create "$tag" \
+            --title "vigosk $v" \
+            --generate-notes \
+            "dist/vigosk-$v.tar.gz" \
+            "dist/vigosk-$v.tar.gz.sha256"

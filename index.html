@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vigosk</title>
+<link rel="stylesheet" href="static/style.css">
+<link rel="stylesheet" href="static/themes.css">
+<link rel="stylesheet" href="static/layouts.css">
+</head>
+<body>
+
+<div class="theme-toast" id="theme-toast"></div>
+
+<!-- VIGOSK main menu — invoked by Escape when no other modal is open.
+     Transparent overlay with a backdrop blur so the live kiosk
+     metrics keep rendering (and updating) behind it. No frames,
+     no borders — just the braille title and two ghost actions. -->
+<div class="vigosk-menu" id="vigosk-menu" aria-hidden="true">
+  <div class="vigosk-menu-title" aria-label="VIGOSK">VIGOSK</div>
+  <div class="vigosk-menu-actions">
+    <button class="vigosk-menu-action" id="vigosk-settings-btn">SETTINGS</button>
+    <button class="vigosk-menu-action" id="vigosk-quit-btn">QUIT</button>
+    <button class="vigosk-menu-action" id="vigosk-help-btn">HELP</button>
+  </div>
+  <div class="vigosk-menu-hint">↑↓←→ navigate · enter select · esc close</div>
+</div>
+
+<!-- Help overlay — invoked from the VIGOSK menu's HELP button. Lists
+     every keyboard shortcut. Same transparent / blurred treatment as
+     the main menu so the kiosk metrics keep ticking behind it. -->
+<div class="vigosk-menu vigosk-help" id="vigosk-help" aria-hidden="true">
+  <div class="vigosk-help-title">KEYBOARD SHORTCUTS</div>
+  <div class="vigosk-help-grid">
+    <span class="vigosk-help-key">Esc</span><span class="vigosk-help-desc">open / close VIGOSK menu</span>
+    <span class="vigosk-help-key">S</span><span class="vigosk-help-desc">settings</span>
+    <span class="vigosk-help-key">W</span><span class="vigosk-help-desc">widgets</span>
+    <span class="vigosk-help-key">L</span><span class="vigosk-help-desc">layouts</span>
+    <span class="vigosk-help-key">G</span><span class="vigosk-help-desc">line / braille graph mode</span>
+    <span class="vigosk-help-key">T</span><span class="vigosk-help-desc">theme picker</span>
+    <span class="vigosk-help-key">A · D</span><span class="vigosk-help-desc">previous / next theme</span>
+    <span class="vigosk-help-key">1 – 4</span><span class="vigosk-help-desc">default · gauges · heatmap · flowstrip</span>
+    <span class="vigosk-help-key">↑ ↓ ← →</span><span class="vigosk-help-desc">navigate menu actions</span>
+    <span class="vigosk-help-key">Enter</span><span class="vigosk-help-desc">activate focused action</span>
+    <span class="vigosk-help-key">?</span><span class="vigosk-help-desc">show this help</span>
+  </div>
+  <div class="vigosk-menu-hint">esc · back</div>
+</div>
+
+<!-- Settings modal: gear chip → 3 sub-buttons → respective sub-modal. -->
+<div class="theme-modal settings-modal" id="settings-modal" aria-hidden="true">
+  <div class="theme-modal-box">
+    <button class="modal-close" id="settings-close" aria-label="Close settings">×</button>
+    <div class="theme-modal-title">SETTINGS</div>
+    <div class="settings-grid">
+      <button class="settings-btn" id="settings-layout-btn">
+        <span class="settings-btn-label">LAYOUT</span>
+        <span class="settings-btn-value" id="settings-layout-value">—</span>
+      </button>
+      <button class="settings-btn" id="settings-widgets-btn">
+        <span class="settings-btn-label">WIDGETS</span>
+        <span class="settings-btn-value" id="settings-widgets-value">configure</span>
+      </button>
+      <button class="settings-btn" id="settings-graph-btn">
+        <span class="settings-btn-label">LINE MODE</span>
+        <span class="settings-btn-value" id="settings-graph-value">—</span>
+      </button>
+      <button class="settings-btn" id="settings-theme-btn">
+        <span class="settings-btn-label">THEME</span>
+        <span class="settings-btn-value" id="settings-theme-value">—</span>
+      </button>
+    </div>
+    <div class="theme-modal-hint">tap a row to change</div>
+  </div>
+</div>
+
+<!-- Widgets picker modal — per-layout enable/disable + reorder. -->
+<div class="theme-modal widgets-modal" id="widgets-modal" aria-hidden="true">
+  <div class="theme-modal-box">
+    <button class="modal-back" data-back="widgets" aria-label="Back to settings">← BACK</button>
+    <div class="theme-modal-title">WIDGETS · <span id="widgets-title">—</span></div>
+    <div class="widgets-list" id="widgets-list"></div>
+    <div class="theme-modal-hint">tap a slot to cycle through widgets · saved per layout</div>
+  </div>
+</div>
+
+<!-- Theme picker modal. -->
+<div class="theme-modal" id="theme-modal" aria-hidden="true">
+  <div class="theme-modal-box">
+    <button class="modal-back" data-back="theme" aria-label="Back to settings">← BACK</button>
+    <div class="theme-modal-title">SELECT THEME</div>
+    <div class="theme-modal-grid" id="theme-grid"></div>
+    <div class="theme-modal-hint">tap a swatch · swipe to cycle · ← BACK when done</div>
+  </div>
+</div>
+
+<!-- Graph-style (line mode) picker modal. -->
+<div class="theme-modal graph-modal" id="graph-modal" aria-hidden="true">
+  <div class="theme-modal-box">
+    <button class="modal-back" data-back="graph" aria-label="Back to settings">← BACK</button>
+    <div class="theme-modal-title">SELECT GRAPH STYLE</div>
+    <div class="theme-modal-grid graph-grid" id="graph-grid"></div>
+    <div class="theme-modal-hint">tap to switch · ← BACK when done</div>
+  </div>
+</div>
+
+<!-- Layout picker modal. -->
+<div class="theme-modal layouts-modal" id="layouts-modal" aria-hidden="true">
+  <div class="theme-modal-box">
+    <button class="modal-back" data-back="layouts" aria-label="Back to settings">← BACK</button>
+    <div class="theme-modal-title">SELECT LAYOUT</div>
+    <div class="theme-modal-grid layouts-grid" id="layouts-grid"></div>
+    <div class="theme-modal-hint">tap to switch · ← BACK when done</div>
+  </div>
+</div>
+
+<header class="header">
+  <span class="host" id="host">—</span>
+  <span><span class="label">up</span><span class="val" id="uptime">—</span></span>
+  <span><span class="label">load</span><span class="val" id="load">—</span></span>
+  <span class="tick-ctl" aria-label="Refresh interval">
+    <button class="tick-btn" id="tick-down" aria-label="Faster">−</button>
+    <span class="tick-val" id="tick-val">100ms</span>
+    <button class="tick-btn" id="tick-up" aria-label="Slower">+</button>
+  </span>
+  <span class="theme-chip settings-chip" id="settings-chip" role="button" aria-label="Open settings">⚙ SET</span>
+  <span class="clock" id="clock">--:--:--</span>
+</header>
+
+<div class="panels">
+
+  <!-- CPU + GPU split panel -->
+  <section class="panel split-panel">
+    <div class="panel-half cpu-half">
+      <div class="title">
+        <span>CPU</span>
+        <span class="sub cpu-meta" id="cpu-meta">
+          <span class="cpu-meta-model" id="cpu-meta-model">—</span>
+          <span class="cpu-meta-sep">·</span>
+          <span class="cpu-meta-freq" id="cpu-meta-freq">—</span>
+          <span class="cpu-meta-sep">·</span>
+          <span class="cpu-meta-cores" id="cpu-meta-cores">—c</span>
+        </span>
+      </div>
+      <div class="panel-head">
+        <div class="big" id="cpu-pct" style="color: var(--accent);">0%</div>
+        <div class="cpu-temp" id="cpu-temp" title="CPU temperature">— °C</div>
+      </div>
+      <pre class="braille cpu" id="cpu-spark"></pre>
+      <div class="cores" id="cores"></div>
+    </div>
+    <div class="panel-half gpu-half" id="gpu-half" hidden>
+      <div class="title">
+        <span>GPU</span>
+        <span class="sub cpu-meta" id="gpu-meta">
+          <span class="cpu-meta-model" id="gpu-meta-model">—</span>
+          <span class="cpu-meta-sep">·</span>
+          <span class="cpu-meta-freq" id="gpu-meta-freq">—</span>
+        </span>
+      </div>
+      <div class="panel-head">
+        <div class="big" id="gpu-pct" style="color: var(--accent);">0%</div>
+        <div class="cpu-temp" id="gpu-readout" title="GPU temp (or power if no dedicated sensor)">—</div>
+      </div>
+      <pre class="braille cpu" id="gpu-spark"></pre>
+      <div class="cores" id="gpu-engines"></div>
+    </div>
+  </section>
+
+  <!-- Memory panel -->
+  <section class="panel">
+    <div class="title">
+      <span>MEMORY</span>
+      <span class="sub" id="mem-meta">— / —</span>
+    </div>
+    <div class="panel-head">
+      <div class="big" id="mem-pct" style="color: var(--accent-2);">0%</div>
+    </div>
+    <pre class="braille mem" id="mem-spark"></pre>
+    <div class="mem-stats">
+      <div>
+        <div class="row"><span class="k">RAM</span><span class="v" id="ram-line"><span class="usage-bytes" id="ram-usage">—</span><span class="usage-pct" id="ram-pct"></span></span></div>
+        <div class="bar"><div class="fill" id="ram-fill"></div></div>
+      </div>
+      <div class="row" style="margin-top:1px;">
+        <span class="k">cached <span class="v" id="cached">—</span></span>
+        <span class="k">buf <span class="v" id="buffers">—</span></span>
+        <span class="k">avail <span class="v" id="avail">—</span></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Disk + Net panel — split 50/50 vertically -->
+  <section class="panel split-panel">
+    <div class="panel-half disk-half">
+      <div class="title">
+        <span>DISK</span>
+        <span class="sub" id="proc-count">— procs</span>
+      </div>
+      <div class="disk-stats" id="disk-stats">
+        <!-- Disk rows are populated dynamically; one entry per real mount or
+             LVM thin-pool. Falls back to just "/" on hosts with a single FS. -->
+      </div>
+      <div id="swap-block">
+        <div class="row"><span class="k">SWAP</span><span class="v" id="swap-line"><span class="usage-bytes" id="swap-usage">—</span><span class="usage-pct" id="swap-pct"></span></span></div>
+        <div class="bar"><div class="fill" id="swap-fill"></div></div>
+      </div>
+      <div class="io-row">
+        <span class="arrow dn" title="disk read">D▼</span>
+        <span class="v" id="disk-read">0 B/s</span>
+        <span class="arrow up" title="disk write">D▲</span>
+        <span class="v" id="disk-write">0 B/s</span>
+      </div>
+      <div class="peak-row">
+        <span>peak rx <span class="v" id="rx-peak">0 B/s</span></span>
+        <span>peak tx <span class="v" id="tx-peak">0 B/s</span></span>
+      </div>
+    </div>
+    <div class="panel-half net-half">
+      <div class="title">
+        <span>NET</span>
+      </div>
+      <div class="wan-lan-big">
+        <div class="wl-block" id="wan-block" hidden>
+          <div class="wl-head">
+            <span class="wl-tag wan">WAN</span>
+            <span class="wl-iface" id="wan-iface">—</span>
+          </div>
+          <div class="wl-rates">
+            <span class="arrow dn">▼</span><span class="v" id="wan-rx">0 B/s</span>
+            <span class="arrow up">▲</span><span class="v" id="wan-tx">0 B/s</span>
+          </div>
+        </div>
+        <div class="wl-block" id="lan-block" hidden>
+          <div class="wl-head">
+            <span class="wl-tag lan">LAN</span>
+            <span class="wl-iface" id="lan-iface">—</span>
+          </div>
+          <div class="wl-rates">
+            <span class="arrow dn">▼</span><span class="v" id="lan-rx">0 B/s</span>
+            <span class="arrow up">▲</span><span class="v" id="lan-tx">0 B/s</span>
+          </div>
+        </div>
+        <div class="wl-block ping-block" id="ping-block">
+          <div class="wl-head">
+            <span class="wl-tag ping">PING</span>
+            <span class="wl-iface" id="ping-meta">— ms scale</span>
+          </div>
+          <div class="ping-row">
+            <span class="ping-tag">GW</span>
+            <span class="ping-target" id="ping-gw-target">—</span>
+            <span class="ping-ms" id="ping-gw-ms">— ms</span>
+            <pre class="braille ping" id="ping-gw-spark"></pre>
+          </div>
+          <div class="ping-row">
+            <span class="ping-tag">EXT</span>
+            <span class="ping-target" id="ping-ext-target">—</span>
+            <span class="ping-ms" id="ping-ext-ms">— ms</span>
+            <pre class="braille ping" id="ping-ext-spark"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Processes panel -->
+  <section class="panel">
+    <div class="title">
+      <span>PROCESSES</span>
+      <span class="sub" id="proc-meta">— total</span>
+    </div>
+    <div class="proc-table">
+      <div class="proc-head">
+        <span>PID</span><span>NAME</span><span>CPU%</span><span>MEM%</span>
+      </div>
+      <div class="proc-rows" id="proc-rows"></div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ── Gauges layout ────────────────────────────────────────────────
+     Active when documentElement[data-layout="gauges"]. Hidden by CSS
+     in every other layout. Same /api/stats source as the default. -->
+<div class="layout layout-gauges" id="layout-gauges">
+
+  <div class="gauges-row" id="g-row">
+    <div class="gauge" id="g-cpu">
+      <svg class="gauge-svg" viewBox="0 0 130 130" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <circle class="gauge-track"  cx="65" cy="65" r="59" stroke-dasharray="2 2"></circle>
+        <circle class="gauge-fill"   cx="65" cy="65" r="59"
+                transform="rotate(-90 65 65)"
+                stroke-dasharray="0 370.7079"
+                pathLength="370.7079"
+                id="g-cpu-arc"></circle>
+      </svg>
+      <div class="gauge-content">
+        <div class="gauge-label">CPU</div>
+        <div class="gauge-value" id="g-cpu-pct">—%</div>
+        <div class="gauge-sub"   id="g-cpu-sub">— °C</div>
+      </div>
+    </div>
+
+    <div class="gauge gauge-gpu" id="g-gpu" hidden>
+      <svg class="gauge-svg" viewBox="0 0 130 130" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <circle class="gauge-track" cx="65" cy="65" r="59" stroke-dasharray="2 2"></circle>
+        <circle class="gauge-fill"  cx="65" cy="65" r="59"
+                transform="rotate(-90 65 65)"
+                stroke-dasharray="0 370.7079"
+                pathLength="370.7079"
+                id="g-gpu-arc"></circle>
+      </svg>
+      <div class="gauge-content">
+        <div class="gauge-label">GPU</div>
+        <div class="gauge-value" id="g-gpu-pct">—%</div>
+        <div class="gauge-sub"   id="g-gpu-sub">—</div>
+      </div>
+    </div>
+
+    <div class="gauge" id="g-mem">
+      <svg class="gauge-svg" viewBox="0 0 130 130" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <circle class="gauge-track" cx="65" cy="65" r="59" stroke-dasharray="2 2"></circle>
+        <circle class="gauge-fill"  cx="65" cy="65" r="59"
+                transform="rotate(-90 65 65)"
+                stroke-dasharray="0 370.7079"
+                pathLength="370.7079"
+                id="g-mem-arc"></circle>
+      </svg>
+      <div class="gauge-content">
+        <div class="gauge-label">MEM</div>
+        <div class="gauge-value" id="g-mem-pct">—%</div>
+        <div class="gauge-sub"   id="g-mem-sub">— / —</div>
+      </div>
+    </div>
+
+    <div class="gauge" id="g-disk">
+      <svg class="gauge-svg" viewBox="0 0 130 130" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <circle class="gauge-track" cx="65" cy="65" r="59" stroke-dasharray="2 2"></circle>
+        <circle class="gauge-fill"  cx="65" cy="65" r="59"
+                transform="rotate(-90 65 65)"
+                stroke-dasharray="0 370.7079"
+                pathLength="370.7079"
+                id="g-disk-arc"></circle>
+      </svg>
+      <div class="gauge-content">
+        <div class="gauge-label" id="g-disk-label">DISK</div>
+        <div class="gauge-value" id="g-disk-pct">—%</div>
+        <div class="gauge-sub"   id="g-disk-sub">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gauges-grid">
+    <section class="gauges-card g-cpu-card">
+      <div class="gauges-card-head">
+        <span>CPU</span>
+        <span class="dim" id="g-cores-meta">— c</span>
+      </div>
+      <pre class="braille cpu" id="g-cpu-spark"></pre>
+      <div class="g-cores-grid" id="g-cores-grid"></div>
+    </section>
+
+    <section class="gauges-card g-net">
+      <div class="gauges-card-head">
+        <span>NET</span>
+        <span class="dim" id="g-net-meta">—</span>
+      </div>
+      <div class="g-net-rows">
+        <div class="g-net-row g-rates" id="g-wan-row" hidden>
+          <span class="g-tag wan">WAN</span>
+          <span class="arrow dn">▼</span><span class="v" id="g-wan-rx">0 B/s</span>
+          <span class="arrow up">▲</span><span class="v" id="g-wan-tx">0 B/s</span>
+        </div>
+        <div class="g-net-row g-rates" id="g-lan-row" hidden>
+          <span class="g-tag lan">LAN</span>
+          <span class="arrow dn">▼</span><span class="v" id="g-lan-rx">0 B/s</span>
+          <span class="arrow up">▲</span><span class="v" id="g-lan-tx">0 B/s</span>
+        </div>
+        <div class="g-net-row g-ping">
+          <span class="g-tag ping">GW</span>
+          <span class="g-target" id="g-ping-gw-target">—</span>
+          <span class="g-ms"     id="g-ping-gw-ms">— ms</span>
+          <pre class="braille ping" id="g-ping-gw-spark"></pre>
+        </div>
+        <div class="g-net-row g-ping">
+          <span class="g-tag ping">EXT</span>
+          <span class="g-target" id="g-ping-ext-target">—</span>
+          <span class="g-ms"     id="g-ping-ext-ms">— ms</span>
+          <pre class="braille ping" id="g-ping-ext-spark"></pre>
+        </div>
+        <div class="g-net-row g-rates g-peak">
+          <span class="g-tag dim">PEAK</span>
+          <span class="arrow dn">▼</span><span class="v dim" id="g-peak-rx">0 B/s</span>
+          <span class="arrow up">▲</span><span class="v dim" id="g-peak-tx">0 B/s</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="gauges-card g-procs">
+      <div class="gauges-card-head">
+        <span>PROCESSES</span>
+        <span class="dim" id="g-procs-meta">—</span>
+      </div>
+      <div class="g-procs-rows" id="g-procs-rows"></div>
+    </section>
+  </div>
+
+</div>
+
+<!-- ── Heatmap layout ──────────────────────────────────────────────
+     Active when documentElement[data-layout="heatmap"]. The chart
+     IS the interface: top is the five vital percentages, middle is
+     a per-core × time CPU heatmap (60s scope, one cell ≈ 1s), and
+     the bottom is a NET activity strip (rx / tx braille sparks +
+     gateway / external ping). Same /api/stats source as default. -->
+<div class="layout layout-heatmap" id="layout-heatmap">
+
+  <!-- Five-cell strip — order matches the design reference:
+       CPU · MEM · DISK · GPU · LOAD. The GPU cell hides when no
+       iGPU is reported, and the strip collapses to four columns. -->
+  <div class="hm-pcts" id="hm-pcts">
+    <div class="hm-pct" id="hm-pct-cpu"><span class="hm-pct-tag">CPU</span><span class="hm-pct-val" id="hm-cpu-pct">—%</span></div>
+    <div class="hm-pct" id="hm-pct-mem"><span class="hm-pct-tag">MEM</span><span class="hm-pct-val" id="hm-mem-pct">—%</span></div>
+    <div class="hm-pct" id="hm-pct-disk"><span class="hm-pct-tag">DISK</span><span class="hm-pct-val" id="hm-disk-pct">—%</span></div>
+    <div class="hm-pct" id="hm-gpu-cell" hidden><span class="hm-pct-tag">GPU</span><span class="hm-pct-val" id="hm-gpu-pct">—%</span></div>
+    <div class="hm-pct" id="hm-pct-load"><span class="hm-pct-tag">LOAD</span><span class="hm-pct-val" id="hm-load-val">—</span></div>
+  </div>
+
+  <section class="hm-card hm-cores-card">
+    <div class="hm-card-head">
+      <span>CORES × TIME</span>
+      <span class="dim" id="hm-cores-meta">— · 60s</span>
+    </div>
+    <div class="hm-cores" id="hm-cores"></div>
+    <div class="hm-axis"><span>← 60s</span><span>now →</span></div>
+  </section>
+
+  <!-- Bottom strip: two stacked Unicode block sparklines (DOWNLOAD on
+       top, UPLOAD on bottom) sharing a single time axis and y-scale.
+       The compact "↑ rate · ↓ rate · ping Nms" meta line on the right
+       mirrors the reference. -->
+  <section class="hm-card hm-net-card">
+    <div class="hm-card-head">
+      <span>NET ↑↓</span>
+      <span class="dim" id="hm-net-meta">—</span>
+    </div>
+    <div class="hm-net-graph">
+      <div class="hm-net-row">
+        <span class="hm-net-tag hm-rx-tag">DL ↓</span>
+        <span class="hm-net-rate" id="hm-rx-rate">—</span>
+        <pre class="hm-net-spark hm-rx-spark" id="hm-rx-spark"></pre>
+      </div>
+      <div class="hm-net-row">
+        <span class="hm-net-tag hm-tx-tag">UL ↑</span>
+        <span class="hm-net-rate" id="hm-tx-rate">—</span>
+        <pre class="hm-net-spark hm-tx-spark" id="hm-tx-spark"></pre>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ── Flowstrip layout ────────────────────────────────────────────
+     Active when documentElement[data-layout="flowstrip"]. Six narrow
+     columns (CPU · MEM · GPU · DISK · WAN · PING), each flowing
+     top-to-bottom: primary line graph → label → big number →
+     sub-line → secondary line graph. A single horizontal banner
+     row of top processes ("TOP name pct …") sits across the bottom.
+     Same /api/stats source. -->
+<div class="layout layout-flowstrip" id="layout-flowstrip">
+
+  <div class="fs-cols" id="fs-cols">
+
+    <section class="fs-col fs-cpu">
+      <pre class="braille fs-graph fs-cpu-graph" id="fs-cpu-graph"></pre>
+      <div class="fs-label">cpu</div>
+      <div class="fs-pct" id="fs-cpu-pct">—%</div>
+      <div class="fs-sub" id="fs-cpu-sub">— · —</div>
+      <pre class="fs-spark fs-cpu-spark" id="fs-cpu-spark"></pre>
+    </section>
+
+    <section class="fs-col fs-mem">
+      <pre class="braille fs-graph fs-mem-graph" id="fs-mem-graph"></pre>
+      <div class="fs-label">mem</div>
+      <div class="fs-pct" id="fs-mem-pct">—%</div>
+      <div class="fs-sub" id="fs-mem-sub">— / —</div>
+      <pre class="fs-spark fs-mem-spark" id="fs-mem-spark"></pre>
+    </section>
+
+    <section class="fs-col fs-gpu" id="fs-gpu-col" hidden>
+      <pre class="braille fs-graph fs-gpu-graph" id="fs-gpu-graph"></pre>
+      <div class="fs-label">gpu</div>
+      <div class="fs-pct" id="fs-gpu-pct">—%</div>
+      <div class="fs-sub" id="fs-gpu-sub">— · —</div>
+      <pre class="fs-spark fs-gpu-spark" id="fs-gpu-spark"></pre>
+    </section>
+
+    <section class="fs-col fs-disk">
+      <pre class="braille fs-graph fs-disk-graph" id="fs-disk-graph"></pre>
+      <div class="fs-label">disk</div>
+      <div class="fs-pct" id="fs-disk-pct">—%</div>
+      <div class="fs-sub" id="fs-disk-sub">—</div>
+      <pre class="fs-spark fs-disk-spark" id="fs-disk-spark"></pre>
+    </section>
+
+    <section class="fs-col fs-net">
+      <pre class="braille fs-graph fs-net-graph" id="fs-net-graph"></pre>
+      <div class="fs-label">wan</div>
+      <div class="fs-pct" id="fs-net-rx">0</div>
+      <div class="fs-sub" id="fs-net-sub">↑ — ↓</div>
+      <pre class="fs-spark fs-net-spark" id="fs-net-spark"></pre>
+    </section>
+
+    <section class="fs-col fs-ping">
+      <pre class="braille fs-graph fs-ping-graph" id="fs-ping-graph"></pre>
+      <div class="fs-label">ping</div>
+      <div class="fs-pct" id="fs-ping-gw">—</div>
+      <div class="fs-sub" id="fs-ping-sub">gw · — ms</div>
+      <pre class="fs-spark fs-ping-spark" id="fs-ping-spark"></pre>
+    </section>
+
+  </div>
+
+  <section class="fs-procs-banner">
+    <span class="fs-banner-tag">TOP</span>
+    <span class="fs-banner-list" id="fs-procs-banner"></span>
+    <span class="fs-banner-more" id="fs-procs-more">—</span>
+  </section>
+
+</div>
+
+<script src="static/app.js"></script>
+<script src="static/layouts.js"></script>
+</body>
+</html>

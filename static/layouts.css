@@ -1,0 +1,1350 @@
+/* ════════════════════════════════════════════════════════════════
+   Alternate layouts — selected via [data-layout="<name>"] on <html>
+   Defaults to the panel grid in style.css when no attribute is set.
+   Each layout reuses the same /api/stats stream; only DOM differs.
+   ════════════════════════════════════════════════════════════════ */
+
+/* Hide all alternate layouts by default; only the active one shows. */
+.layout { display: none; }
+
+/* Default layout: panel grid is visible, alternate layouts hidden. */
+[data-layout="gauges"] .panels { display: none; }
+[data-layout="gauges"] .layout-gauges { display: flex; }
+
+/* ── Gauges layout ───────────────────────────────────────────────── */
+.layout-gauges {
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Top row — big circular dials. Order is CPU · GPU · MEM · DISK so
+   compute-related dials sit together; .no-gpu collapses the row to
+   three tracks on hosts where intel_gpu_top isn't producing data. */
+.gauges-row {
+  display: grid; gap: 4px;
+  grid-template-columns: repeat(4, 1fr);
+  flex: 0 0 auto;
+}
+.gauges-row.no-gpu {
+  grid-template-columns: repeat(3, 1fr);
+}
+.gauge {
+  position: relative;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 4px;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 0;
+  /* Wider/flatter dials on slim strips, near-square on tall screens.
+     The aspect-ratio bound keeps the SVG ring readable across sizes. */
+  aspect-ratio: 1.6 / 1;
+  overflow: hidden;
+  box-shadow: none;
+}
+/* Accent stripe and box framing removed — dials read as floating
+   rings + label/value, matching the user's "no box around gauges"
+   request. The SVG's preserveAspectRatio="xMidYMid meet" keeps the
+   circle round inside whatever container shape flexbox chooses. */
+.gauge-svg {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+.gauge-track {
+  fill: none;
+  stroke: var(--dim-2);
+  stroke-width: 1.2;
+}
+.gauge-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  /* The number itself updates instantly, but the arc length glides so
+     a 47→48 transition reads as motion rather than a jump. Mirrors the
+     0.35s ease used on default-layout bars in style.css. */
+  transition: stroke-dasharray 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+              stroke 0.2s ease;
+}
+.gauge-fill.warn  { stroke: var(--warn); }
+.gauge-fill.crit  { stroke: var(--crit); }
+.gauge-fill.good  { stroke: var(--good); }
+.gauge-fill.calm  { stroke: var(--accent-2); }
+
+/* Center stack: label / big number / sub. */
+.gauge-content {
+  position: relative;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 1px;
+  text-align: center;
+  z-index: 1;
+}
+.gauge-label {
+  color: var(--accent);
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  line-height: 1;
+}
+.gauge-value {
+  color: var(--fg-bright);
+  font-size: clamp(28px, 3.4vw, 44px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -1.5px;
+  font-variant-numeric: tabular-nums;
+}
+.gauge-sub {
+  color: var(--dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+  line-height: 1.1;
+}
+
+/* Bottom region — three cards beneath the gauges. The CPU card
+   combines a recent-trend sparkline with the per-core grid so neither
+   half looks sparse. */
+.gauges-grid {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 1.4fr 1fr 1.3fr;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.gauges-card {
+  position: relative;
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 5px 8px 6px;
+  display: flex; flex-direction: column;
+  min-height: 0; min-width: 0; gap: 3px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 #ffffff05, 0 0 0 1px #00000040;
+}
+.gauges-card::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: var(--accent-3); opacity: 0.6;
+  border-radius: 3px 0 0 3px;
+}
+.gauges-card-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  color: var(--accent); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 2px;
+  border-bottom: 1px solid var(--dim-2);
+  padding-bottom: 3px; margin-bottom: 1px;
+}
+.gauges-card-head .dim {
+  color: var(--dim); font-weight: 400;
+  letter-spacing: 0; text-transform: none; font-size: 11px;
+}
+
+/* Cores grid — 4×2 of "c0  ▓▓▓░░ 23%" rows. */
+.g-cores-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px 10px;
+  flex: 1 1 auto; min-height: 0;
+  align-content: start;
+}
+.g-core {
+  display: grid;
+  grid-template-columns: 28px 1fr 32px;
+  gap: 4px; align-items: center;
+  font-size: 11px; color: var(--dim);
+}
+.g-core .id  { color: var(--dim); letter-spacing: 0.5px; }
+.g-core .pct { color: var(--fg); text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.g-core .bar {
+  position: relative; height: 5px;
+  background: var(--grid);
+  border: 1px solid #00000050; border-radius: 1px;
+  overflow: hidden;
+}
+.g-core .bar > .fill {
+  position: absolute; inset: 0 100% 0 0;
+  background: linear-gradient(90deg, var(--good) 0%, var(--accent-2) 40%, var(--warn) 75%, var(--crit) 95%);
+  transition: right 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* NET card rows.
+   Three row variants share a 28px tag column but specialise after:
+     .g-rates  — TAG ▼ rx ▲ tx        (WAN / LAN / PEAK)
+     .g-ping   — TAG target ms spark  (GW / EXT)
+   The shared base sets typography; modifiers swap the grid template. */
+.g-net-rows {
+  display: flex; flex-direction: column; gap: 2px;
+  flex: 1 1 auto; min-height: 0;
+  justify-content: space-around;
+}
+.g-net-row {
+  display: grid;
+  gap: 4px 6px; align-items: center;
+  font-size: 11px; white-space: nowrap;
+}
+.g-net-row.g-rates {
+  grid-template-columns: 32px auto 1fr auto 1fr;
+}
+.g-net-row.g-ping {
+  grid-template-columns: 32px auto 56px 1fr;
+}
+.g-net-row .g-tag {
+  color: var(--accent); font-weight: 700;
+  font-size: 10px; letter-spacing: 1.5px;
+}
+.g-net-row .g-tag.lan  { color: var(--accent-2); }
+.g-net-row .g-tag.ping { color: var(--accent-2); }
+.g-net-row .g-tag.dim  { color: var(--dim); }
+.g-net-row .arrow.dn { color: var(--good); }
+.g-net-row .arrow.up { color: var(--warn); }
+.g-net-row .v {
+  color: var(--fg-bright);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px; font-weight: 700;
+  text-align: right; min-width: 56px;
+}
+.g-net-row .v.dim {
+  color: var(--dim); font-size: 11px; font-weight: 600;
+}
+.g-net-row .g-target {
+  color: var(--dim); font-size: 10px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+}
+.g-net-row .g-ms {
+  color: var(--fg-bright); font-variant-numeric: tabular-nums;
+  font-size: 12px; font-weight: 700; text-align: right;
+}
+.g-net-row .braille.ping {
+  font-size: 9px; min-height: 0; height: 12px;
+  margin: 0; padding: 0;
+  text-align: right;
+}
+.g-net-row.g-peak {
+  border-top: 1px solid var(--dim-2);
+  padding-top: 2px; margin-top: 2px;
+}
+
+/* Process list — same 4-column grid as the default layout. The JS
+   sizes the row count to the integer number of rows that fit, so
+   `overflow: hidden` here is just a backstop and the visible list
+   always ends on a complete row. */
+.g-procs-rows {
+  display: flex; flex-direction: column;
+  flex: 1 1 auto; min-height: 0; overflow: hidden;
+  font-size: 11px; line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  align-content: flex-start;
+}
+.g-proc-row {
+  display: grid;
+  grid-template-columns: 46px 1fr 38px 38px;
+  gap: 4px; align-items: center;
+  padding: 0 2px;
+  /* Rows distribute the container's height equally — JS picks the row
+     count (see _gMaxProcRows) so the result lands close to a 14px
+     natural row height regardless of the kiosk's window size. */
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.g-proc-row .pid  { color: var(--dim); }
+.g-proc-row .name { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-proc-row .cpu,
+.g-proc-row .mem  { text-align: right; font-weight: 600; }
+
+/* Combined CPU card — sparkline on top, per-core grid below.
+   The braille graph claims half the vertical space; the cores grid
+   takes the rest. A faint divider line separates the two halves so
+   the eye reads them as related but distinct. */
+.g-cpu-card .braille {
+  flex: 1 1 0;
+  min-height: 40px;
+  border-bottom: 1px solid var(--dim-2);
+  padding-bottom: 3px;
+}
+.g-cpu-card .g-cores-grid {
+  flex: 1 1 0;
+  padding-top: 3px;
+}
+
+/* ── Layouts modal — reuses theme-modal scaffolding ────────────── */
+.layouts-modal .layouts-grid {
+  /* Four layouts now (default / gauges / heatmap / flowstrip);
+     2x2 grid keeps the swatches square and roomy. */
+  grid-template-columns: repeat(2, 1fr);
+}
+.layouts-chip {
+  /* Slight tonal shift so chips read as distinct tap targets
+     even at a glance, without relying on color (theme-aware). */
+  letter-spacing: 1.2px;
+}
+
+/* Layout swatch cards in the picker — show a tiny preview thumbnail. */
+.layout-swatch {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px;
+  background: var(--panel-2); border: 1px solid var(--dim-2);
+  border-radius: 3px; cursor: pointer;
+  user-select: none; -webkit-user-select: none;
+  touch-action: manipulation;
+  font-size: 10px; letter-spacing: 1.5px;
+  text-transform: uppercase; font-weight: 700;
+  color: var(--fg);
+  transition: transform 0.08s ease, border-color 0.15s ease;
+}
+.layout-swatch:active { transform: scale(0.95); }
+.layout-swatch.selected { border-color: var(--accent); box-shadow: 0 0 6px var(--accent-3); }
+.layout-swatch .preview {
+  height: 64px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Default-layout preview ─────────────────────────────────────
+   Four tall vertical panels matching the live grid's column ratio
+   (1.15 / 0.9 / 1.2 / 1.15). Panels 1 and 3 are split (CPU+GPU,
+   DISK+NET) so we draw a faint divider mid-height. Each panel has
+   a coloured "spark" band at the top and a couple of dim bars
+   underneath to suggest the bars/tables inside. */
+.preview-default {
+  display: grid;
+  gap: 2px; padding: 3px;
+  grid-template-columns: 1.15fr 0.9fr 1.2fr 1.15fr;
+}
+.preview-default .panel-mini {
+  position: relative;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 1px;
+  display: flex; flex-direction: column;
+  gap: 2px; padding: 3px 2px;
+  min-height: 0;
+}
+.preview-default .panel-mini.split::after {
+  content: ""; position: absolute;
+  left: 2px; right: 2px; top: 50%;
+  border-top: 1px solid var(--dim-2);
+}
+.preview-default .panel-mini .spark {
+  flex: 1 1 auto;
+  background: var(--accent);
+  opacity: 0.35;
+  border-radius: 1px;
+  min-height: 0;
+}
+.preview-default .panel-mini .line {
+  height: 2px;
+  background: var(--dim);
+  border-radius: 1px;
+  flex: 0 0 auto;
+}
+.preview-default .panel-mini .line.short { width: 70%; }
+
+/* ── Gauges-layout preview ──────────────────────────────────────
+   Top: four small dial circles (CPU · GPU · MEM · DISK).
+   Bottom: three cards in the live 1.4 / 1 / 1.3 ratio (CPU · NET ·
+   PROCS). The dial::before draws a partial ring that re-tints
+   with the active accent — same trick the live gauge fill uses. */
+.preview-gauges {
+  display: flex; flex-direction: column;
+  gap: 2px; padding: 3px;
+}
+.preview-gauges .dials {
+  display: grid; gap: 2px;
+  grid-template-columns: repeat(4, 1fr);
+  flex: 1.4 1 0;
+  min-height: 0;
+}
+.preview-gauges .dial {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 1px;
+  display: flex; align-items: center; justify-content: center;
+}
+.preview-gauges .dial::before {
+  content: "";
+  width: 16px; height: 16px;
+  border: 1.5px solid var(--accent);
+  border-right-color: transparent;
+  border-radius: 50%;
+}
+.preview-gauges .cards {
+  display: grid; gap: 2px;
+  grid-template-columns: 1.4fr 1fr 1.3fr;
+  flex: 1 1 0;
+  min-height: 0;
+}
+.preview-gauges .card-mini {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 1px;
+}
+
+/* ── Heatmap-layout preview ─────────────────────────────────────
+   Top: five percent cells. Middle: 8-row × 14-col heat grid (one
+   row per CPU core, matching the live count). Bottom: a single
+   sparkline strip suggesting the rx/tx overlay graph. The cell
+   colour buckets match _hmHeatColor in layouts.js so previews and
+   live data always share a palette. */
+.preview-heatmap {
+  display: flex; flex-direction: column;
+  gap: 2px; padding: 3px;
+}
+.preview-heatmap .pcts {
+  display: grid; gap: 1px;
+  grid-template-columns: repeat(5, 1fr);
+  flex: 0 0 8px;
+}
+.preview-heatmap .pct {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 1px;
+}
+.preview-heatmap .heat {
+  display: grid; gap: 1px;
+  grid-template-columns: repeat(14, 1fr);
+  grid-auto-rows: 1fr;
+  flex: 1 1 0;
+  min-height: 0;
+}
+.preview-heatmap .heat span {
+  background: var(--grid);
+  border-radius: 0.5px;
+}
+.preview-heatmap .heat span[data-v="1"] { background: var(--good); }
+.preview-heatmap .heat span[data-v="2"] { background: var(--accent-2); }
+.preview-heatmap .heat span[data-v="3"] { background: var(--warn); }
+.preview-heatmap .heat span[data-v="4"] { background: var(--crit); }
+.preview-heatmap .net {
+  flex: 0 0 8px;
+  /* Curved-ish gradient that reads as a sparkline at thumbnail
+     size — green rx peak on the left, gold tx peak on the right. */
+  background:
+    radial-gradient(ellipse 40% 80% at 25% 50%,
+      var(--good) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 80% at 75% 50%,
+      var(--warn) 0%, transparent 70%),
+    var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 1px;
+}
+
+/* ── Flowstrip-layout preview ───────────────────────────────────
+   Top: six narrow column-cards, each a tall stack of
+   (graph · pct · details · spark). Bottom: a wide procs strip. */
+.preview-flowstrip {
+  display: flex; flex-direction: column;
+  gap: 2px; padding: 3px;
+}
+.preview-flowstrip .cols {
+  display: grid; gap: 2px;
+  grid-template-columns: repeat(6, 1fr);
+  flex: 1.6 1 0;
+  min-height: 0;
+}
+.preview-flowstrip .col {
+  display: flex; flex-direction: column;
+  gap: 1px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 1px;
+  padding: 1px;
+}
+.preview-flowstrip .col .g {
+  flex: 1.4 1 0;
+  background: var(--accent);
+  opacity: 0.45;
+  border-radius: 1px;
+}
+.preview-flowstrip .col .p {
+  height: 2px;
+  background: var(--accent);
+  opacity: 0.7;
+  border-radius: 1px;
+}
+.preview-flowstrip .col .d {
+  flex: 0.7 1 0;
+  background: var(--dim-2);
+  opacity: 0.6;
+  border-radius: 1px;
+}
+.preview-flowstrip .col .s {
+  flex: 0.5 1 0;
+  background: var(--accent-2);
+  opacity: 0.45;
+  border-radius: 1px;
+}
+.preview-flowstrip .procs {
+  flex: 0.6 1 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 1px;
+  /* Faint horizontal pinstripes mimic the proc rows. */
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0, transparent 2px,
+    var(--dim-2) 2px, var(--dim-2) 3px);
+  opacity: 0.85;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Flowstrip layout — six narrow columns flowing top→bottom:
+     primary line graph · italic label · big colored number ·
+     sub line · secondary line graph.
+   A single horizontal banner row of top processes spans the bottom.
+   Mirrors the "02 _ flow strip" reference template — minimal chrome,
+   dashed vertical dividers, no boxed cards.
+   ════════════════════════════════════════════════════════════════ */
+[data-layout="flowstrip"] .panels { display: none; }
+[data-layout="flowstrip"] .layout-flowstrip { display: flex; }
+
+.layout-flowstrip {
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+.fs-cols {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.fs-cols.no-gpu { grid-template-columns: repeat(5, 1fr); }
+.fs-col {
+  position: relative;
+  display: flex; flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px 4px;
+  min-height: 0; min-width: 0;
+  overflow: hidden;
+}
+/* Dashed vertical divider between columns — sits on the LEFT edge
+   except for the first column. Matches the reference template's
+   minimal-chrome look (no boxed panels, no left accent bar). */
+.fs-col + .fs-col {
+  border-left: 1px dashed var(--dim-2);
+}
+
+/* Top graph: smooth line graph (or braille glyphs in braille mode).
+   Bottom graph (.fs-spark): block-glyph (▁▂▃▄▅▆▇█) sparkline that
+   reads as discrete bars rather than a smooth curve — visual
+   contrast with the top so the eye groups them as "trend vs
+   spike-shape" rather than two of the same chart. */
+.fs-col .fs-graph {
+  flex: 1.6 1 0;
+  min-height: 30px;
+  font-size: 13px;
+  letter-spacing: -1px;
+  width: 100%;
+  margin: 0;
+}
+/* Bottom sparkline host. The bar renderer fills clientWidth ×
+   clientHeight with DOM bars, so we let flex grow this slot to take
+   the leftover vertical space between the big number above and the
+   process banner below — no more empty band under the glyphs. */
+.fs-col .fs-spark {
+  flex: 1 1 0;
+  min-height: 30px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+  display: block;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* Italic lowercase column label — small, dim, sits between graph
+   and big number like an inline caption. */
+.fs-col .fs-label {
+  font-style: italic;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--dim);
+  text-transform: lowercase;
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+/* Big numeric reading — fills most of the column width. Per-column
+   tint via the bottom-of-file rules so the readout colour-matches
+   its neighbouring graphs. */
+.fs-col .fs-pct {
+  font-size: clamp(28px, 3.2vw, 44px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -2px;
+  line-height: 1;
+  color: var(--fg-bright);
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fs-col .fs-sub {
+  font-size: 10px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* All columns share the kiosk's primary accent — the FlowStrip reads
+   as one row, with column hierarchy coming from spacing and dashed
+   dividers rather than per-metric tinting. */
+.fs-col .fs-graph,
+.fs-col .fs-pct,
+.fs-col .fs-spark { color: var(--accent); }
+
+/* Drop the global drop-shadow glow on FlowStrip line graphs — the
+   stack is dense and the soft halo bleeds across the sub-line into
+   the spark above. Default/gauges/heatmap line graphs keep the glow. */
+.fs-col .fs-graph .spark-line { filter: none; }
+
+/* Bottom proc banner — single horizontal row, "TOP" tag on the left,
+   a cluster of "name pct%" pairs in the middle, "+N more" on the right.
+   Tabular numerics keep percentages aligned, dashed top border ties
+   it to the dashed column dividers above. */
+.fs-procs-banner {
+  display: flex; align-items: center;
+  gap: 14px;
+  padding: 5px 12px;
+  border-top: 1px dashed var(--dim-2);
+  font-size: 11px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.fs-banner-tag {
+  color: var(--dim);
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  flex: 0 0 auto;
+}
+.fs-banner-list {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 14px;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+}
+.fs-banner-item {
+  display: inline-flex; align-items: baseline; gap: 4px;
+  white-space: nowrap;
+}
+.fs-banner-item .name {
+  color: var(--fg-bright);
+  font-weight: 600;
+}
+.fs-banner-item .pct {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+/* The first proc gets a brighter accent treatment so the eye lands
+   there first — matches the reference where "chromium 30%" is
+   tinted distinctly from the rest of the row. */
+.fs-banner-item:first-child .name { color: var(--crit); }
+.fs-banner-item:first-child .pct  { color: var(--crit); opacity: 0.7; }
+.fs-banner-more {
+  color: var(--dim);
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Per-theme overrides where the gauge ring needs tweaks ─────── */
+/* Dials are box-less in every theme now (user request: "get rid of
+   box/border around the gauges"). Wireframe's hand-drawn frame
+   stays on the gauges-card containers only. */
+[data-theme="wireframe"] .gauges-card {
+  border: 1.5px solid var(--fg);
+  border-radius: 9px 5px 7px 6px / 6px 8px 5px 7px;
+}
+[data-theme="wireframe"] .gauges-card::before { display: none; }
+[data-theme="wireframe"] .gauge-track { stroke: var(--dim); }
+[data-theme="wireframe"] .gauge-fill  { stroke: var(--fg); }
+
+[data-theme="eink"] .gauge-track { stroke: var(--dim-2); }
+[data-theme="eink"] .gauge-fill  { stroke: var(--fg); }
+
+[data-theme="matrix"] .gauge-fill { stroke: var(--accent); }
+
+/* ════════════════════════════════════════════════════════════════
+   Heatmap layout — "the chart IS the interface".
+   Three stacked rows: percentage strip / cores × time grid / NET.
+   ════════════════════════════════════════════════════════════════ */
+[data-layout="heatmap"] .panels { display: none; }
+[data-layout="heatmap"] .layout-heatmap { display: flex; }
+
+.layout-heatmap {
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── TOP: percentage strip ─────────────────────────────────────── */
+.hm-pcts {
+  display: grid; gap: 4px;
+  grid-template-columns: repeat(5, 1fr);
+  flex: 0 0 auto;
+}
+.hm-pcts.no-gpu { grid-template-columns: repeat(4, 1fr); }
+.hm-pct {
+  position: relative;
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 #ffffff05, 0 0 0 1px #00000040;
+}
+.hm-pct::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: var(--accent-3); opacity: 0.6;
+  border-radius: 3px 0 0 3px;
+}
+.hm-pct-tag {
+  color: var(--accent); font-size: 11px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+}
+.hm-pct-val {
+  color: var(--fg-bright);
+  font-size: clamp(22px, 2.6vw, 32px);
+  font-weight: 700; line-height: 1;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+/* ── Card scaffolding (shared by middle + bottom sections) ─────── */
+.hm-card {
+  position: relative;
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 5px 8px 6px;
+  display: flex; flex-direction: column;
+  min-height: 0; min-width: 0; gap: 3px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 #ffffff05, 0 0 0 1px #00000040;
+}
+.hm-card::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: var(--accent-3); opacity: 0.6;
+  border-radius: 3px 0 0 3px;
+}
+.hm-card-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  color: var(--accent); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 2px;
+  border-bottom: 1px solid var(--dim-2);
+  padding-bottom: 3px; margin-bottom: 1px;
+}
+.hm-card-head .dim {
+  color: var(--dim); font-weight: 400;
+  letter-spacing: 0; text-transform: none; font-size: 11px;
+}
+
+/* ── MIDDLE: cores × time heatmap ──────────────────────────────── */
+.hm-cores-card { flex: 1 1 auto; }
+.hm-cores {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 4px 0;
+}
+/* Each row: [c00 label] [60-cell heat strip] [right-aligned %]. The
+   strip is the fluid column so cells stretch to fill the card width
+   regardless of how many cores there are. The wrap clips the strip to
+   exactly the visible HM_COLS cells; the strip itself is one cell
+   wider, with the extra cell sitting offscreen-right so each second's
+   "live" sample slides into view rather than snapping to the edge. */
+.hm-core-row {
+  display: grid;
+  grid-template-columns: 36px 1fr 44px;
+  gap: 6px; align-items: stretch;
+  flex: 1 1 0;
+  min-height: 0;
+}
+.hm-core-id {
+  color: var(--dim); font-size: 11px;
+  letter-spacing: 0.5px;
+  align-self: center;
+}
+.hm-core-strip-wrap {
+  overflow: hidden;
+  height: 100%;
+  min-height: 0;
+}
+.hm-core-strip {
+  display: flex;
+  height: 100%;
+  /* HM_COLS+1 cells sized so HM_COLS of them fill the wrap; the +1th
+     cell lives just past the right edge and slides in over one
+     HM_COMMIT_MS via an inline `transform: translateX(...)`. */
+  width: calc(100% * 61 / 60);
+  gap: 1px;
+  will-change: transform;
+}
+.hm-core-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  background: var(--grid);
+  border-radius: 1px;
+}
+/* Transition only the live (rightmost) cell. The other cells must
+   change colour INSTANTLY when the ring shifts on commit — if they
+   transition, the user sees a 0.4s fade right after the strip snaps
+   back to translateX(0), which reads as the heatmap "jogging" one
+   column forward and back on every commit. */
+.hm-core-strip > .hm-core-cell:last-child {
+  transition: background-color 0.4s linear;
+}
+.hm-core-pct {
+  align-self: center;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600; font-size: 11px;
+  color: var(--fg);
+}
+.hm-axis {
+  color: var(--dim); font-size: 10px;
+  display: flex; justify-content: space-between;
+  letter-spacing: 1px;
+  /* Pad on each side so the "← 60s" / "now →" markers align with the
+     left and right edges of the heat strip (skipping the id and pct
+     columns of the row grid above). */
+  padding: 0 44px 0 36px;
+}
+
+/* ── BOTTOM: NET stacked sparklines (DOWNLOAD / UPLOAD) ────────── */
+/* Two rows share one card and one y-axis so the user can compare
+   download vs upload at a glance. The block sparkline glyphs
+   (▁▂▃▄▅▆▇█) live in a <pre> that fills the remaining row width
+   after the label and instantaneous rate. */
+.hm-net-card { flex: 0 0 auto; min-height: 110px; }
+.hm-net-graph {
+  flex: 1 1 auto;
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+.hm-net-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+}
+.hm-net-tag {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--dim);
+  min-width: 42px;
+}
+.hm-rx-tag { color: var(--good); }
+.hm-tx-tag { color: var(--accent-2); }
+.hm-net-rate {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--fg-bright);
+  font-variant-numeric: tabular-nums;
+  min-width: 78px;
+  text-align: right;
+}
+/* Single row of block glyphs (▁▂▃▄▅▆▇█) per direction — quantised
+   bar shape rather than a smooth curve so the user can read DL vs
+   UL activity at a glance. Sized so the tall glyphs read as a bar
+   chart; auto-scaling lives in _renderBlockSpark. */
+.hm-net-spark {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+  pointer-events: none;
+  display: block;
+}
+.hm-rx-spark { color: var(--good); }
+.hm-tx-spark { color: var(--accent-2); }
+
+/* ── Shared DOM-bar sparkline ─────────────────────────────────────
+   Used by both heatmap DL/UL rows and the bottom block-glyph slot
+   of every flowstrip column. The wrap is sized one bar wider than
+   the host so the rightmost ("live") bar lives just past the right
+   edge and slides into view on each new sample, mirroring the cores
+   heatmap above. */
+.bar-spark-wrap {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  width: 100%;
+  gap: 1px;
+  will-change: transform;
+}
+.bar-spark-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 0;
+  background: currentColor;
+  border-radius: 1px;
+  opacity: 0.75;
+  align-self: flex-end;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Widget modularity — when the user customizes a layout's widget
+   set (via the WIDGETS settings tab), the affected container gets
+   [data-modular="1"]. That switches the grid to auto-flow column
+   with minmax(0, 1fr) tracks so the *visible* widgets evenly fill
+   the empty space at any screen size; .widget-hidden removes the
+   widget from layout entirely.
+   ════════════════════════════════════════════════════════════════ */
+.widget-hidden { display: none !important; }
+
+/* ════════════════════════════════════════════════════════════════
+   VIGOSK main menu — opened by Escape when no other modal is up.
+   Transparent backdrop with a soft blur so the kiosk metrics stay
+   visible (and live-updating) behind the menu, but the focus stays
+   on the title + two actions. No frames, no borders — just text.
+   ════════════════════════════════════════════════════════════════ */
+.vigosk-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(14px, 3vh, 40px);
+  background: rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(6px) saturate(0.8);
+  -webkit-backdrop-filter: blur(6px) saturate(0.8);
+  /* No border, no box-shadow — the user wanted "no visible frames". */
+}
+.vigosk-menu.show { display: flex; }
+
+.vigosk-menu-title {
+  font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+  font-size: clamp(48px, 14vh, 140px);
+  line-height: 1;
+  color: var(--accent);
+  text-shadow: 0 0 14px currentColor, 0 0 28px var(--accent-3);
+  letter-spacing: clamp(4px, 1vh, 10px);
+  user-select: none; -webkit-user-select: none;
+}
+.vigosk-menu-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(10px, 2vh, 22px);
+  margin-top: clamp(10px, 2vh, 24px);
+}
+.vigosk-menu-action {
+  background: transparent;
+  color: var(--accent);
+  border: none;
+  font-family: inherit;
+  font-size: clamp(14px, 2.4vh, 26px);
+  font-weight: 700;
+  letter-spacing: clamp(2px, 0.6vh, 5px);
+  text-transform: uppercase;
+  padding: clamp(6px, 1.2vh, 12px) clamp(14px, 2.4vh, 28px);
+  cursor: pointer;
+  user-select: none; -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: color 0.15s ease, text-shadow 0.15s ease, transform 0.08s ease;
+}
+.vigosk-menu-action:hover {
+  color: var(--fg-bright);
+  text-shadow: 0 0 8px var(--accent);
+}
+.vigosk-menu-action:active { transform: scale(0.96); }
+.vigosk-menu-hint {
+  position: absolute;
+  bottom: clamp(10px, 2vh, 24px);
+  font-size: clamp(10px, 1.3vh, 13px);
+  color: var(--dim-2);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  user-select: none; -webkit-user-select: none;
+}
+
+/* Focused action — arrow-key / tab navigation gives one of the
+   buttons keyboard focus. The accent halo mirrors how the modal
+   pickers indicate their .selected swatch. */
+.vigosk-menu-action:focus-visible,
+.vigosk-menu-action.focused {
+  outline: none;
+  color: var(--fg-bright);
+  text-shadow: 0 0 12px var(--accent), 0 0 24px var(--accent-3);
+}
+
+/* Generic keyboard-focus highlight for picker swatches and rows.
+   ↑↓←→ in any modal moves this halo through the visible options;
+   Enter activates the focused one. Visually parallels .selected
+   (used for the "currently-applied" state) without colliding. */
+.settings-btn.focused,
+.theme-swatch.focused,
+.layout-swatch.focused,
+.graph-swatch.focused {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent), 0 0 10px var(--accent-3);
+  outline: none;
+}
+.widgets-row.focused {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent-3);
+  outline: none;
+}
+.settings-btn:focus, .theme-swatch:focus, .layout-swatch:focus,
+.graph-swatch:focus, .widgets-row :focus {
+  outline: none;
+}
+
+/* ── Help overlay ─────────────────────────────────────────────── */
+.vigosk-help-title {
+  color: var(--accent);
+  font-size: clamp(14px, 2.2vh, 24px);
+  font-weight: 700;
+  letter-spacing: clamp(3px, 0.8vh, 6px);
+  text-transform: uppercase;
+  text-shadow: 0 0 8px var(--accent-3);
+}
+.vigosk-help-grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: clamp(6px, 1.2vh, 14px) clamp(20px, 3vh, 40px);
+  font-size: clamp(12px, 1.7vh, 18px);
+  letter-spacing: 1.5px;
+}
+.vigosk-help-key {
+  color: var(--accent);
+  font-weight: 700;
+  text-transform: uppercase;
+  text-align: right;
+  letter-spacing: 2px;
+  font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+}
+.vigosk-help-desc {
+  color: var(--fg);
+  text-transform: lowercase;
+  letter-spacing: 1px;
+}
+
+/* Custom scrollbar — minimal track + slim theme-tinted thumb. Hides
+   the bulky native scrollbar in any scrollable region (currently
+   the WIDGETS modal list; future scrollable surfaces inherit it
+   automatically). Firefox uses the `scrollbar-*` properties below;
+   Chromium uses the ::-webkit-scrollbar pseudo-elements. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-3) transparent;
+}
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--accent-3);
+  border-radius: 3px;
+  opacity: 0.6;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Layouts whose visible widgets should grow to evenly fill the row —
+   no aspect-ratio constraint on the children, so 1fr tracks work. */
+[data-modular="1"].panels,
+[data-modular="1"].gauges-grid,
+[data-modular="1"].hm-pcts,
+[data-modular="1"].fs-cols {
+  grid-template-columns: none !important;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+}
+
+/* Gauges dial row needs special treatment: the dial has
+   aspect-ratio: 1.6/1, so stretching its width also stretches its
+   height. A single dial filling 1280px would force 800px tall and
+   clip off-screen. Instead we keep each dial at ~its default cell
+   width (25% of the row) and center the visible set horizontally —
+   so 1 of 4 dials stays the same size, just centred. */
+[data-modular="1"].gauges-row {
+  display: flex !important;
+  grid-template-columns: none !important;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+}
+[data-modular="1"].gauges-row .gauge {
+  flex: 0 1 calc(25% - 3px);
+  /* Hard cap matches the default 4-dial layout: dial width never
+     exceeds what it would have been with all four visible. */
+  max-width: calc(25% - 3px);
+}
+
+/* When every widget in the gauges bottom-cards section is off, the
+   container collapses and the dial row expands to absorb the empty
+   space. The dials drop their 1.6:1 box aspect-ratio so each one
+   fills its full row-width × row-height share — the SVG circle
+   inside still uses preserveAspectRatio="xMidYMid meet" so it stays
+   perfectly round regardless of the now-non-square host. */
+.gauges-grid[data-empty="1"] { display: none !important; }
+.layout-gauges:has(> .gauges-grid[data-empty="1"]) .gauges-row {
+  flex: 1 1 auto;
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: stretch;
+  gap: 4px;
+}
+.layout-gauges:has(> .gauges-grid[data-empty="1"]) .gauges-row > .gauge {
+  flex: 1 1 0;
+  min-width: 0;
+  aspect-ratio: auto;
+  max-width: none;
+  height: 100%;
+}
+
+/* Symmetric: if the dial row is entirely empty, drop it so the
+   bottom cards expand to fill. */
+.gauges-row[data-empty="1"] { display: none !important; }
+
+/* ── Widgets picker modal ──────────────────────────────────────── */
+.widgets-modal .widgets-list {
+  display: flex; flex-direction: column;
+  gap: clamp(8px, 1.4vh, 14px);
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: clamp(4px, 0.8vh, 8px) clamp(2px, 0.4vh, 6px);
+}
+.widgets-group {
+  display: flex; flex-direction: column;
+  gap: 4px;
+}
+.widgets-group-head {
+  color: var(--dim);
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  border-bottom: 1px solid var(--dim-2);
+  padding-bottom: 3px;
+  margin-bottom: 2px;
+}
+.widgets-row {
+  display: grid;
+  grid-template-columns: 22px 26px 1fr 26px auto;
+  gap: 6px; align-items: center;
+  padding: 6px 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--dim-2);
+  border-radius: 3px;
+  font-size: 12px;
+}
+.widgets-row.off { opacity: 0.65; }
+.widgets-row.anchor { border-color: var(--accent-3); }
+.widgets-row .widgets-pos {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+.widgets-row .widgets-move {
+  background: var(--panel);
+  color: var(--fg-bright);
+  border: 1px solid var(--dim-2);
+  border-radius: 2px;
+  padding: 2px 0;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none; -webkit-user-select: none;
+  transition: transform 0.08s ease, background 0.15s ease;
+}
+.widgets-row .widgets-move:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.widgets-row .widgets-move:not(:disabled):active {
+  transform: scale(0.92);
+  background: var(--accent-3);
+}
+/* The center button is the "current widget" indicator + tap-to-cycle
+   control. Wide tap target with the widget name; off slots show
+   "OFF" in dim text. */
+.widgets-row .widgets-cycle {
+  background: var(--panel);
+  color: var(--dim);
+  border: 1px solid var(--dim-2);
+  border-radius: 2px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none; -webkit-user-select: none;
+  transition: transform 0.08s ease, background 0.15s ease, color 0.15s ease;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.widgets-row .widgets-cycle.on {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.widgets-row .widgets-cycle.anchor {
+  background: var(--accent-3);
+  color: var(--fg-bright);
+  border-color: var(--accent-3);
+  cursor: default;
+}
+.widgets-row .widgets-cycle:disabled { opacity: 1; }
+.widgets-row .widgets-cycle:not(:disabled):active { transform: scale(0.97); }
+
+.widgets-row .widgets-toggle {
+  background: var(--panel);
+  color: var(--dim);
+  border: 1px solid var(--dim-2);
+  border-radius: 2px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none; -webkit-user-select: none;
+  transition: transform 0.08s ease, background 0.15s ease, color 0.15s ease;
+  min-width: 44px;
+  text-align: center;
+}
+.widgets-row .widgets-toggle.on {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.widgets-row .widgets-toggle:disabled { opacity: 0.5; cursor: default; }
+.widgets-row .widgets-toggle:not(:disabled):active { transform: scale(0.94); }
+.widgets-reset {
+  align-self: stretch;
+  background: transparent;
+  color: var(--dim);
+  border: 1px dashed var(--dim-2);
+  border-radius: 3px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none; -webkit-user-select: none;
+  transition: color 0.15s ease, border-color 0.15s ease;
+  margin-top: 4px;
+}
+.widgets-reset:active {
+  color: var(--fg-bright);
+  border-color: var(--accent-3);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Alternate-layout responsive scaling — companion to the rules at
+   the bottom of style.css. Same idea: density toggles at the slim
+   and tall breakpoints; typography clamps in between.
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Slim strip (≤ 320px tall) ──────────────────────────────────── */
+@media (max-height: 320px) {
+  /* Gauges layout: drop the bottom card row entirely. The dial row
+     alone already conveys CPU/MEM/GPU/DISK at a glance; the cards
+     below would clip badly at 280px. */
+  .layout-gauges .gauges-grid { display: none; }
+  .layout-gauges .gauges-row { flex: 1 1 auto; }
+  .gauge { aspect-ratio: auto; padding: 4px; }
+  .gauge-label { font-size: 10px; letter-spacing: 1.5px; }
+  .gauge-sub { font-size: 10px; }
+
+  /* Heatmap layout: the NET card at the bottom needs >110px and the
+     cores grid needs the rest — at 280px total there's no room for
+     both. Drop NET; cores × time is the headline of this layout. */
+  .layout-heatmap .hm-net-card { display: none; }
+  .layout-heatmap .hm-pct { padding: 4px 8px; }
+  .layout-heatmap .hm-pcts { gap: 2px; }
+  .layout-heatmap { gap: 2px; }
+
+  /* Flowstrip: kill the secondary spark and the procs banner. The
+     primary graph + label + big number + sub-line still tells the
+     full per-column story. */
+  .layout-flowstrip .fs-spark { display: none; }
+  .layout-flowstrip .fs-procs-banner { display: none; }
+  .layout-flowstrip .fs-col { padding: 4px 8px 2px; gap: 2px; }
+  .layout-flowstrip { gap: 2px; }
+}
+
+/* ── Tall screens (≥ 600px tall) ───────────────────────────────── */
+@media (min-height: 600px) {
+  .layout-gauges { gap: 8px; }
+  .layout-gauges .gauges-row { gap: 8px; }
+  .layout-gauges .gauges-grid { gap: 8px; }
+  .gauge { padding: 14px; }
+  .gauge-label { font-size: 14px; letter-spacing: 2.5px; }
+  .gauge-sub { font-size: 14px; }
+  .gauges-card { padding: 10px 14px; }
+  .gauges-card-head { font-size: 14px; padding-bottom: 5px; }
+  .gauges-card-head .dim { font-size: 13px; }
+  .g-core { font-size: 13px; }
+  .g-net-row { font-size: 13px; }
+  .g-net-row .v { font-size: 14px; }
+  .g-net-row .g-ms { font-size: 14px; }
+  .g-proc-row { font-size: 13px; }
+
+  .layout-heatmap { gap: 8px; }
+  .layout-heatmap .hm-pcts { gap: 8px; }
+  .hm-pct { padding: 14px 18px; }
+  .hm-pct-tag { font-size: 14px; }
+  .hm-card { padding: 10px 14px; }
+  .hm-card-head { font-size: 14px; padding-bottom: 5px; }
+  .hm-core-id { font-size: 13px; }
+  .hm-core-pct { font-size: 13px; }
+  .hm-axis { font-size: 12px; }
+  .hm-net-tag { font-size: 13px; }
+  .hm-net-rate { font-size: 14px; }
+  .hm-net-spark { height: 48px; }
+  .hm-net-card { min-height: 150px; }
+  .hm-net-graph { min-height: 130px; gap: 12px; }
+  .hm-net-row { min-height: 50px; }
+
+  .layout-flowstrip { gap: 10px; }
+  .fs-col { padding: 10px 16px 6px; gap: 6px; }
+  .fs-col .fs-graph { font-size: 18px; min-height: 50px; }
+  .fs-col .fs-spark { min-height: 50px; }
+  .fs-col .fs-label { font-size: 14px; }
+  .fs-col .fs-sub { font-size: 13px; }
+  .fs-procs-banner { padding: 10px 16px; font-size: 14px; gap: 20px; }
+}

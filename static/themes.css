@@ -1,0 +1,401 @@
+/* ════════════════════════════════════════════════════════════════
+   WIREFRAME theme — chalkboard / handdrawn (black + chalk white)
+   ════════════════════════════════════════════════════════════════ */
+[data-theme="wireframe"] {
+  --bg:        #060504;
+  --panel:     #0d0c0a;
+  --panel-2:   #14120f;
+  --border:    #ebe5d6;
+  --grid:      #1a1714;
+  --fg:        #ebe5d6;
+  --fg-bright: #ffffff;
+  --dim:       #948f80;
+  --dim-2:     #4a463e;
+  --accent:    #ffffff;
+  --accent-2:  #d6d0c2;
+  --accent-3:  #807a6c;
+  --warn:      #f0d8a0;
+  --crit:      #f0a8a0;
+  --good:      #ebe5d6;   /* wireframe stays monochrome */
+}
+
+/* Faint smudges of "chalk dust" via soft radial gradients. */
+[data-theme="wireframe"] body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse at 22% 28%, rgba(255,255,255,0.022) 0, transparent 45%),
+    radial-gradient(ellipse at 78% 62%, rgba(255,255,255,0.018) 0, transparent 55%),
+    radial-gradient(ellipse at 50% 88%, rgba(255,255,255,0.012) 0, transparent 40%);
+}
+[data-theme="wireframe"] body::after { display: none; }
+
+/* Hand-drawn rectangles: irregular border-radius + slightly offset
+   secondary strokes (box-shadow) read as a sketched outline. */
+[data-theme="wireframe"] .header,
+[data-theme="wireframe"] .panel {
+  background: var(--panel);
+  border: 1.5px solid var(--fg);
+  border-radius: 9px 5px 7px 6px / 6px 8px 5px 7px;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(235, 229, 214, 0.12),
+    2px 1px 0 rgba(235, 229, 214, 0.06),
+    -1px 2px 0 rgba(235, 229, 214, 0.04);
+}
+[data-theme="wireframe"] .panel::before { display: none; }
+
+/* Italic titles feel hand-written; dashed underline like a pencil rule. */
+[data-theme="wireframe"] .panel .title,
+[data-theme="wireframe"] .proc-head {
+  border-bottom: 1px dashed var(--dim);
+  font-style: italic;
+}
+[data-theme="wireframe"] .header .host {
+  font-style: italic;
+  text-shadow: 0 0 2px rgba(235, 229, 214, 0.4);
+}
+
+/* Bars: hand-drawn enclosing rectangle with crosshatched chalk fill. */
+[data-theme="wireframe"] .bar {
+  background: transparent;
+  border: 1px solid var(--fg);
+  border-radius: 5px 3px 4px 2px / 3px 4px 2px 4px;
+}
+[data-theme="wireframe"] .bar > .fill {
+  background:
+    repeating-linear-gradient(115deg,
+      var(--fg) 0, var(--fg) 1px,
+      transparent 1px, transparent 4px),
+    repeating-linear-gradient(65deg,
+      var(--fg) 0, var(--fg) 0.5px,
+      transparent 0.5px, transparent 7px) !important;
+  box-shadow: none !important;
+  border-right: 1.5px solid var(--fg);
+}
+
+/* Big numbers: chalky, no glow. */
+[data-theme="wireframe"] .big {
+  font-weight: 700;
+}
+
+/* Braille graphs: chalk strokes, accent rx/tx kept readable but desaturated. */
+[data-theme="wireframe"] .braille {
+  text-shadow: 0 0 1.5px rgba(235, 229, 214, 0.35);
+  filter: contrast(0.92);
+}
+[data-theme="wireframe"] .braille.cpu,
+[data-theme="wireframe"] .braille.mem { color: var(--fg); }
+[data-theme="wireframe"] .braille.net.rx { color: var(--good); }
+[data-theme="wireframe"] .braille.net.tx { color: var(--warn); }
+
+[data-theme="wireframe"] .net-row .arrow.dn { color: var(--good); }
+[data-theme="wireframe"] .net-row .arrow.up { color: var(--warn); }
+/* Kill all glow on arrows so the wireframe theme stays chalky, not neon. */
+[data-theme="wireframe"] .arrow { text-shadow: none !important; }
+
+[data-theme="wireframe"] .theme-chip {
+  border: 1.5px solid var(--fg);
+  border-radius: 4px 6px 3px 5px / 5px 3px 6px 4px;
+  background: transparent;
+  color: var(--fg);
+  font-style: italic;
+}
+
+/* Per-core tiny bars get the same crosshatch treatment. */
+[data-theme="wireframe"] .core .bar { border-radius: 3px 2px 3px 1px; }
+[data-theme="wireframe"] .core .pct { color: var(--fg); }
+
+/* ════════════════════════════════════════════════════════════════
+   E-INK theme — paper, dithered fills, no glow, no transitions
+   ════════════════════════════════════════════════════════════════ */
+[data-theme="eink"] {
+  --bg:        #ebe7dc;
+  --panel:     #f5f1e6;
+  --panel-2:   #ede9de;
+  --border:    #2a2520;
+  --grid:      #d4cebc;
+  --fg:        #1a1410;
+  --fg-bright: #000000;
+  --dim:       #5a5550;
+  --dim-2:     #a8a090;
+  --accent:    #1a1410;
+  --accent-2:  #2a2520;
+  --accent-3:  #1a1410;
+  --warn:      #4a4035;
+  --crit:      #000000;
+  --good:      #2a2520;
+}
+[data-theme="eink"] body { background: var(--bg); color: var(--fg); }
+[data-theme="eink"] body::after { display: none; }
+[data-theme="eink"] .header,
+[data-theme="eink"] .panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  border-radius: 0;
+}
+[data-theme="eink"] .panel::before { background: var(--accent); opacity: 1; width: 3px; }
+[data-theme="eink"] .big,
+[data-theme="eink"] .header .host,
+[data-theme="eink"] .braille,
+[data-theme="eink"] .net-row .arrow.dn,
+[data-theme="eink"] .net-row .arrow.up {
+  text-shadow: none !important;
+  filter: none !important;
+}
+[data-theme="eink"] .bar {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+}
+[data-theme="eink"] .bar > .fill {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--fg) 0,
+    var(--fg) 2px,
+    transparent 2px,
+    transparent 4px
+  ) !important;
+  box-shadow: none !important;
+  border-right: 1px solid var(--fg);
+  transition: right 0.5s steps(8, end) !important;
+}
+[data-theme="eink"] .braille {
+  color: var(--fg) !important;
+}
+[data-theme="eink"] .panel .title,
+[data-theme="eink"] .proc-head {
+  border-bottom: 1px solid var(--dim-2);
+}
+[data-theme="eink"] .theme-chip {
+  border: 1px solid var(--fg);
+  background: transparent;
+  color: var(--fg);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   AMBER theme — vintage CRT terminal (orange phosphor on near-black)
+   ════════════════════════════════════════════════════════════════ */
+[data-theme="amber"] {
+  --bg:        #1a0f00;
+  --panel:     #221501;
+  --panel-2:   #2a1c04;
+  --border:    #5a3a08;
+  --grid:      #2f1f06;
+  --fg:        #ffcc77;
+  --fg-bright: #ffe0a8;
+  --dim:       #a86a1c;
+  --dim-2:     #5a3a08;
+  --accent:    #ffb86b;
+  --accent-2:  #ff9933;
+  --accent-3:  #cc6600;
+  --warn:      #ffcc77;
+  --crit:      #ff5050;
+  --good:      #ffaa44;
+}
+[data-theme="amber"] body::after {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(255, 184, 107, 0.06) 2px,
+    rgba(255, 184, 107, 0.06) 3px
+  );
+}
+[data-theme="amber"] .big {
+  text-shadow: 0 0 12px var(--accent), 0 0 22px var(--accent-3);
+}
+[data-theme="amber"] .braille {
+  text-shadow: 0 0 6px currentColor;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MATRIX theme — green-on-black phosphor terminal
+   ════════════════════════════════════════════════════════════════ */
+[data-theme="matrix"] {
+  --bg:        #000800;
+  --panel:     #021a06;
+  --panel-2:   #03220a;
+  --border:    #0a4a18;
+  --grid:      #062a0a;
+  --fg:        #66ffaa;
+  --fg-bright: #b3ffd4;
+  --dim:       #339966;
+  --dim-2:     #0a4a18;
+  --accent:    #00ff66;
+  --accent-2:  #33ff99;
+  --accent-3:  #00aa44;
+  --warn:      #aaff66;
+  --crit:      #ff5577;
+  --good:      #00ff66;
+}
+[data-theme="matrix"] body::after {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 255, 102, 0.05) 2px,
+    rgba(0, 255, 102, 0.05) 3px
+  );
+}
+[data-theme="matrix"] .big {
+  text-shadow: 0 0 12px var(--accent), 0 0 22px var(--accent-3);
+}
+[data-theme="matrix"] .braille {
+  text-shadow: 0 0 6px currentColor;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SOLARIZED-DARK theme
+   ════════════════════════════════════════════════════════════════ */
+[data-theme="solarized"] {
+  --bg:        #002b36;
+  --panel:     #073642;
+  --panel-2:   #094049;
+  --border:    #0d4751;
+  --grid:      #073642;
+  --fg:        #93a1a1;
+  --fg-bright: #eee8d5;
+  --dim:       #586e75;
+  --dim-2:     #294048;
+  --accent:    #268bd2;     /* blue */
+  --accent-2:  #2aa198;     /* cyan */
+  --accent-3:  #6c71c4;     /* violet */
+  --warn:      #b58900;     /* yellow */
+  --crit:      #dc322f;     /* red */
+  --good:      #859900;     /* green */
+}
+[data-theme="solarized"] body::after { display: none; }
+[data-theme="solarized"] .big {
+  text-shadow: 0 0 6px currentColor;
+}
+[data-theme="solarized"] .braille {
+  text-shadow: 0 0 3px currentColor;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PINK theme — kawaii pastel rose + lavender, rounded, sparkles
+   ════════════════════════════════════════════════════════════════ */
+[data-theme="pink"] {
+  --bg:        #1a0e18;
+  --panel:     #2a1525;
+  --panel-2:   #331a2c;
+  --border:    #6a3a5a;
+  --grid:      #251020;
+  --fg:        #ffd9e8;
+  --fg-bright: #fff0f7;
+  --dim:       #b888a5;
+  --dim-2:     #5a3550;
+  --accent:    #ffb3d1;     /* pastel pink */
+  --accent-2:  #d9b3ff;     /* pastel lavender */
+  --accent-3:  #ff80b3;     /* sweet rose */
+  --warn:      #ffd9a8;     /* pastel peach */
+  --crit:      #ff8a9f;     /* soft coral */
+  --good:      #ffc4d9;     /* soft blush — keeps the palette pink */
+}
+/* Sparkle field — tiny dots of pink, lavender, white scattered across.
+   Overrides the default scanline overlay. */
+[data-theme="pink"] body::after {
+  background:
+    radial-gradient(circle at 8% 14%, rgba(255,255,255,0.55) 0, transparent 1.4px),
+    radial-gradient(circle at 22% 38%, rgba(255,179,209,0.55) 0, transparent 1.4px),
+    radial-gradient(circle at 38% 8%,  rgba(217,179,255,0.50) 0, transparent 1.4px),
+    radial-gradient(circle at 51% 92%, rgba(255,255,255,0.45) 0, transparent 1.4px),
+    radial-gradient(circle at 67% 64%, rgba(255,179,209,0.55) 0, transparent 1.4px),
+    radial-gradient(circle at 84% 18%, rgba(217,179,255,0.55) 0, transparent 1.4px),
+    radial-gradient(circle at 95% 81%, rgba(255,255,255,0.40) 0, transparent 1.4px),
+    radial-gradient(circle at 14% 76%, rgba(217,179,255,0.40) 0, transparent 1.2px),
+    radial-gradient(circle at 73% 30%, rgba(255,255,255,0.45) 0, transparent 1.2px),
+    radial-gradient(circle at 44% 56%, rgba(255,179,209,0.40) 0, transparent 1.2px);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+/* Soft rounded corners on chrome — the cutesy bit. */
+[data-theme="pink"] .header,
+[data-theme="pink"] .panel {
+  border-radius: 14px;
+}
+[data-theme="pink"] .panel::before {
+  border-radius: 14px 0 0 14px;
+}
+[data-theme="pink"] .bar {
+  border-radius: 8px;
+}
+[data-theme="pink"] .theme-chip {
+  border-radius: 10px;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PURPLE theme — royal violet neon on deep indigo
+   ════════════════════════════════════════════════════════════════ */
+[data-theme="purple"] {
+  --bg:        #0a0518;
+  --panel:     #14092a;
+  --panel-2:   #1c0e3a;
+  --border:    #3a1f6a;
+  --grid:      #160a30;
+  --fg:        #c8b4e8;
+  --fg-bright: #ece0ff;
+  --dim:       #8a6abf;
+  --dim-2:     #3a2566;
+  --accent:    #a062ff;     /* violet */
+  --accent-2:  #c084ff;     /* lavender */
+  --accent-3:  #6a3fb8;     /* darker purple */
+  --warn:      #ffb866;
+  --crit:      #ff6a90;
+  --good:      #88e8b8;
+}
+[data-theme="purple"] body::after {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(160, 98, 255, 0.05) 2px,
+    rgba(160, 98, 255, 0.05) 3px
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MIDNIGHT theme — deep navy, pale moonlight, restrained glow
+   ════════════════════════════════════════════════════════════════ */
+[data-theme="midnight"] {
+  --bg:        #04030c;
+  --panel:     #0c0a1c;
+  --panel-2:   #100e24;
+  --border:    #2a2548;
+  --grid:      #0e0c1f;
+  --fg:        #b6b3cf;
+  --fg-bright: #e8e4f6;
+  --dim:       #6a6588;
+  --dim-2:     #2a2548;
+  --accent:    #c0bbe0;     /* silver moonlight */
+  --accent-2:  #8a83b8;     /* twilight lavender */
+  --accent-3:  #4a4478;     /* deep dusk */
+  --warn:      #d4b87a;
+  --crit:      #d47a7a;
+  --good:      #9aa8c8;     /* cool steel */
+}
+/* Faint starfield — pinpoint stars in white and pale blue, no scanlines. */
+[data-theme="midnight"] body::after {
+  background:
+    radial-gradient(circle at 4% 12%,  rgba(255,255,255,0.65) 0, transparent 1.1px),
+    radial-gradient(circle at 11% 64%, rgba(180,210,255,0.55) 0, transparent 1.1px),
+    radial-gradient(circle at 19% 28%, rgba(255,255,255,0.45) 0, transparent 1.0px),
+    radial-gradient(circle at 27% 82%, rgba(255,255,255,0.55) 0, transparent 1.1px),
+    radial-gradient(circle at 34% 8%,  rgba(180,210,255,0.50) 0, transparent 1.0px),
+    radial-gradient(circle at 41% 48%, rgba(255,255,255,0.40) 0, transparent 1.0px),
+    radial-gradient(circle at 48% 70%, rgba(180,210,255,0.55) 0, transparent 1.1px),
+    radial-gradient(circle at 56% 22%, rgba(255,255,255,0.55) 0, transparent 1.0px),
+    radial-gradient(circle at 62% 88%, rgba(255,255,255,0.40) 0, transparent 1.0px),
+    radial-gradient(circle at 71% 36%, rgba(180,210,255,0.55) 0, transparent 1.1px),
+    radial-gradient(circle at 78% 64%, rgba(255,255,255,0.45) 0, transparent 1.0px),
+    radial-gradient(circle at 84% 14%, rgba(255,255,255,0.55) 0, transparent 1.1px),
+    radial-gradient(circle at 89% 46%, rgba(180,210,255,0.40) 0, transparent 1.0px),
+    radial-gradient(circle at 95% 78%, rgba(255,255,255,0.55) 0, transparent 1.1px),
+    radial-gradient(circle at 7% 42%,  rgba(255,255,255,0.30) 0, transparent 0.9px),
+    radial-gradient(circle at 23% 56%, rgba(180,210,255,0.30) 0, transparent 0.9px),
+    radial-gradient(circle at 53% 14%, rgba(255,255,255,0.30) 0, transparent 0.9px),
+    radial-gradient(circle at 81% 92%, rgba(180,210,255,0.30) 0, transparent 0.9px);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
