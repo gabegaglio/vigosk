@@ -16,7 +16,6 @@
 
 A terminal-styled system metrics dashboard for Linux. Renders CPU, memory, GPU, disk, network and ping in a fullscreen Chromium kiosk with a `btop`-meets-`htop` aesthetic — but built on the web stack, so it's easy to theme, lay out, and remote-view.
 
-> Was previously called `vterm`. Same dashboard, new name. The braille V-TERM logo lives on as `--braille-logo`.
 
 ---
 
