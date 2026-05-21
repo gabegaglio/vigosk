@@ -177,41 +177,6 @@ See [`OPTIONAL.md`](./OPTIONAL.md) for remote-viewing via nginx and an on-demand
 
 ---
 
-## Development
-
-The repo is the working tree — there is no build step. Edit `metrics.py`, `static/*.js`, `static/*.css` or `index.html`; refresh the kiosk (`Ctrl+R` if you have a keyboard plugged in, or `systemctl restart vigosk-metrics` then re-open).
-
-```
-.
-├── bin/vigosk                # the CLI launcher
-├── install.sh                # curl-to-shell installer
-├── metrics.py                # HTTP server + samplers
-├── kiosk.sh                  # X / chromium boot wrapper
-├── index.html                # main page
-├── static/
-│   ├── app.js                # sampler, draw loop
-│   ├── layouts.js            # menu, layouts, theme picker
-│   ├── style.css             # base styles
-│   ├── themes.css            # theme palette tokens
-│   └── layouts.css           # per-layout styles
-├── assets/
-│   ├── logo.txt              # legible VIGOSK block-letter logo
-│   └── logo-braille.txt      # the braille V-TERM easter egg
-├── OPTIONAL.md               # remote view + screenshot add-ons
-└── .github/workflows/release.yml
-```
-
-### Release flow
-
-Tags matching `v*` trigger `.github/workflows/release.yml`, which builds `vigosk-<version>.tar.gz`, generates release notes, and attaches the tarball + SHA256 to a new GitHub Release. `install.sh` pulls from there.
-
-```sh
-git tag v0.1.0
-git push origin v0.1.0
-```
-
----
-
 ## License
 
 [MIT](./LICENSE) — © 2026 Gabriel Gaglio. Fork, modify, and redistribute freely; keep the copyright notice intact.
