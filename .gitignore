@@ -17,3 +17,9 @@ __pycache__/
 
 # Release build output (CI writes here)
 /dist/
+
+# Host-specific kiosk monitor on/off helpers — not portable across
+# users (assume specific hardware / xset / vbetool behavior).
+screen-off*
+screen-on*
+screen-keepalive*

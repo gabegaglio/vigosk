@@ -94,10 +94,23 @@ vigosk [OPTIONS]
 
 Four built-in layouts, cycle with `1`–`4`:
 
-1. **default** — classic six-row strip: CPU, MEM, GPU, DISK, NET, PING.
+1. **default** — six-row strip: CPU, MEM, GPU, DISK, NET, PING.
 2. **gauges** — dial-based; foreground metric large, supporting metrics small.
-3. **heatmap** — temporal density view; useful when watching for spikes.
-4. **flowstrip** — six-column dense row, uniformly accented; designed for at-a-glance scans.
+3. **heatmap** — temporal density view across cores.
+4. **flowstrip** — six-column dense row, uniformly accented.
+
+<table>
+  <tr>
+    <td align="center"><sub><b>default</b></sub><br><img src="docs/screenshots/default.png" alt="default layout"></td>
+    <td align="center"><sub><b>gauges</b></sub><br><img src="docs/screenshots/gauges.png" alt="gauges layout"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>heatmap</b></sub><br><img src="docs/screenshots/heatmap.png" alt="heatmap layout"></td>
+    <td align="center"><sub><b>flowstrip</b></sub><br><img src="docs/screenshots/flowstrip.png" alt="flowstrip layout"></td>
+  </tr>
+</table>
+
+Each layout has its own widget config (slots on/off, order). Reset a layout to defaults via the `↻` on its swatch in the picker (`L`), or via the Widgets modal (`W`) for the active layout.
 
 ## Themes
 
@@ -143,7 +156,7 @@ The kiosk page polls `/api/stats` and re-renders client-side; nothing on the pag
 exec /usr/local/share/vigosk/kiosk.sh
 ```
 
-And `screen-metrics.service` keeps the server up across reboots:
+And `vigosk-metrics.service` keeps the server up across reboots:
 
 ```ini
 [Unit]
@@ -166,7 +179,7 @@ See [`OPTIONAL.md`](./OPTIONAL.md) for remote-viewing via nginx and an on-demand
 
 ## Development
 
-The repo is the working tree — there is no build step. Edit `metrics.py`, `static/*.js`, `static/*.css` or `index.html`; refresh the kiosk (`Ctrl+R` if you have a keyboard plugged in, or `systemctl restart screen-metrics` then re-open).
+The repo is the working tree — there is no build step. Edit `metrics.py`, `static/*.js`, `static/*.css` or `index.html`; refresh the kiosk (`Ctrl+R` if you have a keyboard plugged in, or `systemctl restart vigosk-metrics` then re-open).
 
 ```
 .
@@ -201,4 +214,4 @@ git push origin v0.1.0
 
 ## License
 
-TBD — add a `LICENSE` file before tagging a public release.
+[MIT](./LICENSE) — © 2026 Gabriel Gaglio. Fork, modify, and redistribute freely; keep the copyright notice intact.

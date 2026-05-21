@@ -20,6 +20,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import psutil
 
@@ -757,7 +758,8 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        if self.path in ("/", "/index.html"):
+        path = urlsplit(self.path).path
+        if path in ("/", "/index.html"):
             try:
                 body = INDEX.read_bytes()
             except FileNotFoundError:
@@ -770,7 +772,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if self.path == "/api/stats":
+        if path == "/api/stats":
             body = json.dumps(snapshot()).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -779,13 +781,13 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        static = STATIC_FILES.get(self.path)
+        static = STATIC_FILES.get(path)
         if static is not None:
             fs_path, ctype = static
             try:
                 body = fs_path.read_bytes()
             except FileNotFoundError:
-                self.send_error(404, f"{self.path} missing")
+                self.send_error(404, f"{path} missing")
                 return
             self.send_response(200)
             self.send_header("Content-Type", ctype)

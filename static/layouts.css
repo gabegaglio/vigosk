@@ -286,6 +286,7 @@
 
 /* Layout swatch cards in the picker — show a tiny preview thumbnail. */
 .layout-swatch {
+  position: relative;
   display: flex; flex-direction: column; gap: 6px;
   padding: 8px;
   background: var(--panel-2); border: 1px solid var(--dim-2);
@@ -299,6 +300,19 @@
 }
 .layout-swatch:active { transform: scale(0.95); }
 .layout-swatch.selected { border-color: var(--accent); box-shadow: 0 0 6px var(--accent-3); }
+.layout-swatch-reset {
+  position: absolute; top: 4px; right: 4px;
+  width: 18px; height: 18px; line-height: 16px;
+  padding: 0; margin: 0;
+  background: var(--panel); color: var(--dim);
+  border: 1px solid var(--dim-2); border-radius: 2px;
+  font: inherit; font-size: 12px; font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.layout-swatch-reset:hover { color: var(--fg); border-color: var(--accent); }
+.layout-swatch-reset.flash { color: var(--accent); border-color: var(--accent); background: var(--accent-3); }
 .layout-swatch .preview {
   height: 64px;
   background: var(--bg);

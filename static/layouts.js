@@ -26,8 +26,11 @@ const LAYOUT_CHIP = {
 };
 
 let currentLayout = (() => {
-  try { return localStorage.getItem("kiosk.layout") || "default"; }
-  catch (e) { return "default"; }
+  try {
+    const q = new URLSearchParams(window.location.search).get("layout");
+    if (q && LAYOUTS.includes(q)) return q;
+    return localStorage.getItem("kiosk.layout") || "default";
+  } catch (e) { return "default"; }
 })();
 
 function applyLayout(name, opts) {
@@ -150,7 +153,28 @@ function buildLayoutSwatch(name) {
 
   const label = document.createElement("div");
   label.textContent = LAYOUT_LABELS[name];
-  sw.append(preview, label);
+
+  // Per-layout reset — clears this layout's widget config without
+  // switching to it. Useful for restoring "factory" widget order on
+  // a layout you're not currently viewing.
+  const reset = document.createElement("button");
+  reset.className = "layout-swatch-reset";
+  reset.type = "button";
+  reset.textContent = "↻";
+  reset.title = "Reset " + LAYOUT_LABELS[name] + " to default widgets";
+  reset.setAttribute("aria-label", reset.title);
+  const stopAll = (e) => { e.stopPropagation(); };
+  reset.addEventListener("pointerdown", stopAll);
+  reset.addEventListener("pointerup",   stopAll);
+  reset.addEventListener("click", (e) => {
+    e.stopPropagation();
+    _wClearConfig(name);
+    if (name === currentLayout) applyWidgetConfig(name);
+    reset.classList.add("flash");
+    setTimeout(() => reset.classList.remove("flash"), 400);
+  });
+
+  sw.append(preview, label, reset);
 
   sw.addEventListener("click", (e) => {
     e.stopPropagation();

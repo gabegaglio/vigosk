@@ -19,7 +19,7 @@ Nginx terminates the public request and forwards to the local metrics server. No
 
 ### Prerequisites
 
-- `metrics.py` already running under `screen-metrics.service` on `127.0.0.1:8765`.
+- `metrics.py` already running under `vigosk-metrics.service` on `127.0.0.1:8765`.
 - Nginx installed (`apt install nginx`).
 - A way for clients to reach the host: LAN IP, Tailscale, ZeroTier, etc.
 
@@ -28,7 +28,7 @@ Nginx terminates the public request and forwards to the local metrics server. No
 1. **Add a location block to your nginx site** (e.g. `/etc/nginx/sites-available/default`, inside the `server { ... }` block):
 
    ```nginx
-   # Live mirror of the kiosk page (served by screen-metrics on :8765).
+   # Live mirror of the kiosk page (served by vigosk-metrics on :8765).
    # Trailing slash on proxy_pass strips the /kiosk/live/ prefix upstream.
    location /kiosk/live/ {
        proxy_pass http://127.0.0.1:8765/;
