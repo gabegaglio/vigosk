@@ -92,23 +92,23 @@ vigosk [OPTIONS]
 
 ## Layouts
 
-Four built-in layouts, cycle with `1`–`4`:
+Four built-in layouts, cycle with `1`–`4`.
 
-1. **default** — six-row strip: CPU, MEM, GPU, DISK, NET, PING.
-2. **gauges** — dial-based; foreground metric large, supporting metrics small.
-3. **heatmap** — temporal density view across cores.
-4. **flowstrip** — six-column dense row, uniformly accented.
+**default** — six-row strip: CPU, MEM, GPU, DISK, NET, PING.
 
-<table>
-  <tr>
-    <td align="center"><sub><b>default</b></sub><br><img src="docs/screenshots/default.png" alt="default layout"></td>
-    <td align="center"><sub><b>gauges</b></sub><br><img src="docs/screenshots/gauges.png" alt="gauges layout"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub><b>heatmap</b></sub><br><img src="docs/screenshots/heatmap.png" alt="heatmap layout"></td>
-    <td align="center"><sub><b>flowstrip</b></sub><br><img src="docs/screenshots/flowstrip.png" alt="flowstrip layout"></td>
-  </tr>
-</table>
+![default layout](docs/screenshots/default.png)
+
+**gauges** — dial-based; foreground metric large, supporting metrics small.
+
+![gauges layout](docs/screenshots/gauges.png)
+
+**heatmap** — temporal density view across cores.
+
+![heatmap layout](docs/screenshots/heatmap.png)
+
+**flowstrip** — six-column dense row, uniformly accented.
+
+![flowstrip layout](docs/screenshots/flowstrip.png)
 
 Each layout has its own widget config (slots on/off, order). Reset a layout to defaults via the `↻` on its swatch in the picker (`L`), or via the Widgets modal (`W`) for the active layout.
 
