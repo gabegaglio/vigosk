@@ -1287,6 +1287,72 @@
   border-color: var(--accent-3);
 }
 
+/* ── Columns picker (default layout) ──────────────────────────────
+   Stacked cards, one per column. Each card has a header with the
+   column number and the SINGLE/PAIR mode toggle, plus 1–2 picker
+   rows (TOP, BOT). Layout reuses .widgets-row visuals but its grid
+   template is overridden via .widgets-col-row to fit the tag +
+   ◀ + cycle + ▶ shape (no separate ON/OFF toggle, since column
+   visibility is implied by widget selection). */
+.widgets-col-card {
+  display: flex; flex-direction: column;
+  gap: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--dim-2);
+  border-radius: 3px;
+  padding: 6px 8px;
+}
+.widgets-col-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+}
+.widgets-col-pos {
+  color: var(--accent); font-weight: 700;
+  letter-spacing: 1.5px; font-size: 11px;
+  text-transform: uppercase;
+}
+.widgets-col-mode {
+  background: var(--panel);
+  color: var(--accent);
+  border: 1px solid var(--accent-3);
+  border-radius: 2px;
+  padding: 4px 12px;
+  font-family: inherit;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none; -webkit-user-select: none;
+  transition: transform 0.08s ease, background 0.15s ease, color 0.15s ease;
+  min-width: 64px;
+}
+.widgets-col-mode.pair {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.widgets-col-mode:active { transform: scale(0.96); }
+.widgets-col-row {
+  grid-template-columns: 36px 26px 1fr 26px;
+  background: var(--panel);
+}
+.widgets-col-row .widgets-pos {
+  color: var(--dim);
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  font-size: 10px;
+  text-transform: uppercase;
+  text-align: left;
+}
+.widgets-col-hint {
+  text-align: center;
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+  padding: 2px 4px;
+}
+
 /* ════════════════════════════════════════════════════════════════
    Alternate-layout responsive scaling — companion to the rules at
    the bottom of style.css. Same idea: density toggles at the slim

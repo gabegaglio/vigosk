@@ -130,8 +130,8 @@
 <div class="panels">
 
   <!-- CPU + GPU split panel -->
-  <section class="panel split-panel">
-    <div class="panel-half cpu-half">
+  <section class="panel split-panel" data-col-id="1" data-col-mode="pair">
+    <div class="panel-half cpu-half" data-widget="cpu">
       <div class="title">
         <span>CPU</span>
         <span class="sub cpu-meta" id="cpu-meta">
@@ -149,7 +149,7 @@
       <pre class="braille cpu" id="cpu-spark"></pre>
       <div class="cores" id="cores"></div>
     </div>
-    <div class="panel-half gpu-half" id="gpu-half" hidden>
+    <div class="panel-half gpu-half" id="gpu-half" data-widget="gpu" hidden>
       <div class="title">
         <span>GPU</span>
         <span class="sub cpu-meta" id="gpu-meta">
@@ -168,31 +168,33 @@
   </section>
 
   <!-- Memory panel -->
-  <section class="panel">
-    <div class="title">
-      <span>MEMORY</span>
-      <span class="sub" id="mem-meta">— / —</span>
-    </div>
-    <div class="panel-head">
-      <div class="big" id="mem-pct" style="color: var(--accent-2);">0%</div>
-    </div>
-    <pre class="braille mem" id="mem-spark"></pre>
-    <div class="mem-stats">
-      <div>
-        <div class="row"><span class="k">RAM</span><span class="v" id="ram-line"><span class="usage-bytes" id="ram-usage">—</span><span class="usage-pct" id="ram-pct"></span></span></div>
-        <div class="bar"><div class="fill" id="ram-fill"></div></div>
+  <section class="panel" data-col-id="2" data-col-mode="single">
+    <div class="panel-half mem-half" data-widget="mem">
+      <div class="title">
+        <span>MEMORY</span>
+        <span class="sub" id="mem-meta">— / —</span>
       </div>
-      <div class="row" style="margin-top:1px;">
-        <span class="k">cached <span class="v" id="cached">—</span></span>
-        <span class="k">buf <span class="v" id="buffers">—</span></span>
-        <span class="k">avail <span class="v" id="avail">—</span></span>
+      <div class="panel-head">
+        <div class="big" id="mem-pct" style="color: var(--accent-2);">0%</div>
+      </div>
+      <pre class="braille mem" id="mem-spark"></pre>
+      <div class="mem-stats">
+        <div>
+          <div class="row"><span class="k">RAM</span><span class="v" id="ram-line"><span class="usage-bytes" id="ram-usage">—</span><span class="usage-pct" id="ram-pct"></span></span></div>
+          <div class="bar"><div class="fill" id="ram-fill"></div></div>
+        </div>
+        <div class="row" style="margin-top:1px;">
+          <span class="k">cached <span class="v" id="cached">—</span></span>
+          <span class="k">buf <span class="v" id="buffers">—</span></span>
+          <span class="k">avail <span class="v" id="avail">—</span></span>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- Disk + Net panel — split 50/50 vertically -->
-  <section class="panel split-panel">
-    <div class="panel-half disk-half">
+  <section class="panel split-panel" data-col-id="3" data-col-mode="pair">
+    <div class="panel-half disk-half" data-widget="disk">
       <div class="title">
         <span>DISK</span>
         <span class="sub" id="proc-count">— procs</span>
@@ -216,7 +218,7 @@
         <span>peak tx <span class="v" id="tx-peak">0 B/s</span></span>
       </div>
     </div>
-    <div class="panel-half net-half">
+    <div class="panel-half net-half" data-widget="net">
       <div class="title">
         <span>NET</span>
       </div>
@@ -264,16 +266,18 @@
   </section>
 
   <!-- Processes panel -->
-  <section class="panel">
-    <div class="title">
-      <span>PROCESSES</span>
-      <span class="sub" id="proc-meta">— total</span>
-    </div>
-    <div class="proc-table">
-      <div class="proc-head">
-        <span>PID</span><span>NAME</span><span>CPU%</span><span>MEM%</span>
+  <section class="panel" data-col-id="4" data-col-mode="single">
+    <div class="panel-half proc-half" data-widget="proc">
+      <div class="title">
+        <span>PROCESSES</span>
+        <span class="sub" id="proc-meta">— total</span>
       </div>
-      <div class="proc-rows" id="proc-rows"></div>
+      <div class="proc-table">
+        <div class="proc-head">
+          <span>PID</span><span>NAME</span><span>CPU%</span><span>MEM%</span>
+        </div>
+        <div class="proc-rows" id="proc-rows"></div>
+      </div>
     </div>
   </section>
 
