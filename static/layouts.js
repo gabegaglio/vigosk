@@ -1212,16 +1212,27 @@ applyLayout(currentLayout);
 const LAYOUT_WIDGETS = {
   default: {
     label: "DEFAULT",
-    groups: [{
-      label: "PANELS",
+    // The default layout uses a column model instead of slot groups:
+    // each column hosts one widget (single) or two widgets stacked
+    // 50/50 (pair). The user can reshape any column at runtime via
+    // the WIDGETS picker — top/bottom widget choice + mode toggle.
+    columnSpec: {
       container: ".panels",
       widgets: [
-        { id: "p-cpu",  label: "CPU + GPU",  selector: ".panels > section:nth-of-type(1)" },
-        { id: "p-mem",  label: "MEMORY",     selector: ".panels > section:nth-of-type(2)" },
-        { id: "p-disk", label: "DISK + NET", selector: ".panels > section:nth-of-type(3)" },
-        { id: "p-proc", label: "PROCESSES",  selector: ".panels > section:nth-of-type(4)" },
+        { id: "cpu",  label: "CPU",  selector: '[data-widget="cpu"]'  },
+        { id: "gpu",  label: "GPU",  selector: '[data-widget="gpu"]', autohide: true },
+        { id: "mem",  label: "MEM",  selector: '[data-widget="mem"]'  },
+        { id: "disk", label: "DISK", selector: '[data-widget="disk"]' },
+        { id: "net",  label: "NET",  selector: '[data-widget="net"]'  },
+        { id: "proc", label: "PROC", selector: '[data-widget="proc"]' },
       ],
-    }],
+      defaultColumns: [
+        { top: "cpu",  bottom: "gpu"  },
+        { top: "mem",  bottom: null   },
+        { top: "disk", bottom: "net"  },
+        { top: "proc", bottom: null   },
+      ],
+    },
   },
   gauges: {
     label: "GAUGES",
@@ -1390,13 +1401,124 @@ function _wResolveLayout(layout) {
   const spec = LAYOUT_WIDGETS[layout];
   if (!spec) return null;
   const stored = _wLoadConfig(layout);
+  if (spec.columnSpec) {
+    return {
+      layout, label: spec.label, kind: "columns",
+      spec: spec.columnSpec,
+      columns: _wResolveColumns(spec.columnSpec, stored),
+    };
+  }
   const groups = spec.groups.map((g) => ({
     label: g.label,
     container: g.container,
     widgets: g.widgets,
     slots: _wResolveGroupSlots(g, stored && stored.groups && stored.groups[g.label]),
   }));
-  return { layout, label: spec.label, groups };
+  return { layout, label: spec.label, kind: "groups", groups };
+}
+
+// ── Column model (default layout) ─────────────────────────────────
+// Stored as { version: 2, columns: [{top, bottom}, ...] }. Legacy
+// configs in the v1 "groups" shape are ignored and we fall back to
+// defaults — the v1 shape grouped CPU+GPU into a single widget so
+// there is no clean migration to per-half pairing.
+function _wResolveColumns(cspec, stored) {
+  const validIds = new Set(cspec.widgets.map((w) => w.id));
+  const defaults = cspec.defaultColumns;
+  let src = null;
+  if (stored && stored.version === 2 && Array.isArray(stored.columns)) {
+    src = stored.columns;
+  }
+  const cols = defaults.map((d, i) => {
+    const entry = src && src[i] ? src[i] : d;
+    const top = entry && validIds.has(entry.top) ? entry.top : null;
+    const bottom = entry && validIds.has(entry.bottom) ? entry.bottom : null;
+    return { top, bottom };
+  });
+  return cols;
+}
+
+function _wIsWidgetAvailable(widget) {
+  if (!widget) return false;
+  if (!widget.autohide) return true;
+  // Autohide widgets (currently GPU) hide their own DOM via the
+  // `hidden` attribute when the metrics feed reports no data. A
+  // configured autohide widget that has no data should not occupy a
+  // column slot — the column collapses to the other half (or hides
+  // entirely if both halves are unavailable).
+  const el = document.querySelector(widget.selector);
+  return !!(el && !el.hidden);
+}
+
+function _wApplyColumns(resolved) {
+  const cspec = resolved.spec;
+  const container = document.querySelector(cspec.container);
+  if (!container) return;
+
+  const widgetById = new Map();
+  cspec.widgets.forEach((w) => {
+    widgetById.set(w.id, { ...w, el: document.querySelector(w.selector) });
+  });
+
+  // All widget elements get detached up-front so each column can be
+  // rebuilt without worrying about move-during-iteration ordering
+  // bugs.
+  const allEls = [];
+  widgetById.forEach((w) => {
+    if (w.el) {
+      if (w.el.parentElement) w.el.parentElement.removeChild(w.el);
+      allEls.push(w.el);
+    }
+  });
+
+  const cols = Array.from(container.querySelectorAll('section.panel[data-col-id]'))
+    .sort((a, b) => (+a.dataset.colId) - (+b.dataset.colId));
+
+  const placed = new Set();
+  let visibleCount = 0;
+  cols.forEach((col, idx) => {
+    const cfg = resolved.columns[idx] || { top: null, bottom: null };
+    const topW = cfg.top  ? widgetById.get(cfg.top)    : null;
+    const botW = cfg.bottom ? widgetById.get(cfg.bottom) : null;
+    const topOK = topW && topW.el && _wIsWidgetAvailable(topW);
+    const botOK = botW && botW.el && _wIsWidgetAvailable(botW);
+
+    col.classList.remove("split-panel");
+    if (!topOK && !botOK) {
+      col.hidden = true;
+      col.removeAttribute("data-col-mode");
+      return;
+    }
+    col.hidden = false;
+    visibleCount++;
+    if (topOK && botOK) {
+      col.setAttribute("data-col-mode", "pair");
+      col.classList.add("split-panel");
+      col.appendChild(topW.el);
+      col.appendChild(botW.el);
+      placed.add(topW.id);
+      placed.add(botW.id);
+    } else {
+      col.setAttribute("data-col-mode", "single");
+      const w = topOK ? topW : botW;
+      col.appendChild(w.el);
+      placed.add(w.id);
+    }
+  });
+
+  // Widgets that didn't land in any column get parked back in the
+  // container, hidden, so a future re-apply can pick them up.
+  allEls.forEach((el) => {
+    if (!el.parentElement) {
+      container.appendChild(el);
+      el.classList.add("widget-hidden");
+    } else {
+      el.classList.remove("widget-hidden");
+    }
+  });
+
+  container.style.setProperty("--visible-cols", String(visibleCount || 1));
+  container.dataset.visibleCols = String(visibleCount);
 }
 
 function _wIsDefaultGroup(group) {
@@ -1447,6 +1569,10 @@ function _wApplyGroup(group) {
 function applyWidgetConfig(layout) {
   const resolved = _wResolveLayout(layout);
   if (!resolved) return;
+  if (resolved.kind === "columns") {
+    _wApplyColumns(resolved);
+    return;
+  }
   resolved.groups.forEach(_wApplyGroup);
 }
 window.__kioskApplyWidgets = applyWidgetConfig;
@@ -1457,11 +1583,98 @@ function _wCurrentLayoutName() {
 }
 
 function _wPersistFromResolved(layout, resolved) {
+  if (resolved.kind === "columns") {
+    _wSaveConfig(layout, { version: 2, columns: resolved.columns.map(
+      (c) => ({ top: c.top || null, bottom: c.bottom || null })
+    ) });
+    return;
+  }
   const cfg = { groups: {} };
   for (const g of resolved.groups) {
     cfg.groups[g.label] = g.slots.map((s) => ({ id: s.id, on: !!s.on }));
   }
   _wSaveConfig(layout, cfg);
+}
+
+// ── Column model helpers (modal-facing) ───────────────────────────
+// Slot identity is by column index + position ("top"/"bottom").
+// Cycling a slot rotates through (null, ...widget ids). Selecting
+// a widget that's already placed elsewhere SWAPS the two slots so
+// each widget appears in at most one column at a time.
+function _wColumnsFindSlot(columns, id) {
+  for (let i = 0; i < columns.length; i++) {
+    if (columns[i].top === id) return { col: i, pos: "top" };
+    if (columns[i].bottom === id) return { col: i, pos: "bottom" };
+  }
+  return null;
+}
+
+function _wColumnsCycleSlot(resolved, colIdx, pos, dir) {
+  const cspec = resolved.spec;
+  // Options: null ("OFF") + every widget id, skipping autohide-with-
+  // no-data widgets so the user can't choose a widget that won't
+  // render. The top half of a column is required to be non-null in
+  // the UI (it's the "primary"); the bottom is optional and offers
+  // OFF so the user can mark a column "single".
+  const options = [null];
+  cspec.widgets.forEach((w) => {
+    if (w.autohide) {
+      const el = document.querySelector(w.selector);
+      if (el && el.hidden) return;
+    }
+    options.push(w.id);
+  });
+  const allowOff = pos === "bottom";
+  const filtered = allowOff ? options : options.filter((o) => o !== null);
+
+  const col = resolved.columns[colIdx];
+  const currentId = col[pos];
+  let cursor = filtered.indexOf(currentId);
+  if (cursor < 0) cursor = 0;
+  cursor = (cursor + dir + filtered.length) % filtered.length;
+  const target = filtered[cursor];
+
+  // Swap-on-collision so each widget id appears in at most one slot.
+  if (target !== null) {
+    const where = _wColumnsFindSlot(resolved.columns, target);
+    if (where && !(where.col === colIdx && where.pos === pos)) {
+      resolved.columns[where.col][where.pos] = currentId;
+    }
+  }
+  resolved.columns[colIdx][pos] = target;
+}
+
+function _wColumnsSetMode(resolved, colIdx, mode) {
+  const col = resolved.columns[colIdx];
+  if (mode === "single") {
+    col.bottom = null;
+  } else if (mode === "pair") {
+    // Promote to pair: pick the first available widget not already
+    // used as bottom. If none, leave it null and let the user pick.
+    if (col.bottom == null) {
+      const used = new Set();
+      resolved.columns.forEach((c) => {
+        if (c.top) used.add(c.top);
+        if (c.bottom) used.add(c.bottom);
+      });
+      const cspec = resolved.spec;
+      const cand = cspec.widgets.find((w) => {
+        if (used.has(w.id)) return false;
+        if (w.autohide) {
+          const el = document.querySelector(w.selector);
+          if (el && el.hidden) return false;
+        }
+        return true;
+      });
+      col.bottom = cand ? cand.id : null;
+    }
+  }
+}
+
+function _wColumnLabel(cspec, id) {
+  if (!id) return "— OFF";
+  const w = cspec.widgets.find((x) => x.id === id);
+  return w ? w.label : "?";
 }
 
 // Cycle slot `idx` to the next widget TYPE in the rotation.
@@ -1515,6 +1728,11 @@ function _renderWidgetsModal() {
   root.innerHTML = "";
   if (titleEl) titleEl.textContent = (resolved && resolved.label) || "—";
   if (!resolved) return;
+
+  if (resolved.kind === "columns") {
+    _renderColumnsModal(root, layout, resolved);
+    return;
+  }
 
   resolved.groups.forEach((group) => {
     const sec = document.createElement("div");
@@ -1633,6 +1851,105 @@ function _renderWidgetsModal() {
   });
   reset.addEventListener("pointerdown", (e) => e.stopPropagation());
   reset.addEventListener("pointerup",   (e) => e.stopPropagation());
+  root.appendChild(reset);
+}
+
+// ── Columns modal renderer (default layout) ───────────────────────
+// One row per column. Each row exposes:
+//   • a SINGLE/PAIR mode toggle
+//   • a TOP widget picker (◀ name ▶)
+//   • a BOTTOM widget picker shown only in PAIR mode; its picker can
+//     land on "— OFF" which behaves like flipping the column back to
+//     SINGLE without losing the top widget choice
+// Picking a widget already used in another column SWAPS the two so
+// each widget appears in at most one place.
+function _renderColumnsModal(root, layout, resolved) {
+  const cspec = resolved.spec;
+  const persist = () => {
+    _wPersistFromResolved(layout, resolved);
+    applyWidgetConfig(layout);
+    _renderWidgetsModal();
+  };
+
+  const mkBtn = (cls, txt, onClick, opts) => {
+    const b = document.createElement("button");
+    b.className = cls;
+    b.textContent = txt;
+    if (opts && opts.title) b.title = opts.title;
+    if (opts && opts.disabled) b.disabled = true;
+    b.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
+    b.addEventListener("pointerdown", (e) => e.stopPropagation());
+    b.addEventListener("pointerup",   (e) => e.stopPropagation());
+    return b;
+  };
+
+  resolved.columns.forEach((col, idx) => {
+    const isPair = col.bottom != null;
+
+    // Each column is a card with two rows (TOP / BOTTOM picker) plus
+    // a header that owns the mode toggle.
+    const card = document.createElement("div");
+    card.className = "widgets-col-card";
+
+    const head = document.createElement("div");
+    head.className = "widgets-col-head";
+    const pos = document.createElement("span");
+    pos.className = "widgets-col-pos";
+    pos.textContent = "COL " + (idx + 1);
+    head.appendChild(pos);
+
+    const modeBtn = mkBtn(
+      "widgets-col-mode" + (isPair ? " pair" : ""),
+      isPair ? "PAIR" : "SINGLE",
+      () => {
+        _wColumnsSetMode(resolved, idx, isPair ? "single" : "pair");
+        persist();
+      },
+      { title: "Toggle column between single widget and stacked pair" }
+    );
+    head.appendChild(modeBtn);
+
+    card.appendChild(head);
+
+    const makePickerRow = (label, pos) => {
+      const row = document.createElement("div");
+      row.className = "widgets-row widgets-col-row";
+      const tag = document.createElement("span");
+      tag.className = "widgets-pos";
+      tag.textContent = label;
+      const prev = mkBtn("widgets-move", "◀",
+        () => { _wColumnsCycleSlot(resolved, idx, pos, -1); persist(); },
+        { title: "Previous widget" });
+      const cycle = mkBtn(
+        "widgets-cycle on",
+        _wColumnLabel(cspec, col[pos]),
+        () => { _wColumnsCycleSlot(resolved, idx, pos, +1); persist(); },
+        { title: "Cycle widget" }
+      );
+      if (col[pos] == null) cycle.classList.remove("on");
+      const next = mkBtn("widgets-move", "▶",
+        () => { _wColumnsCycleSlot(resolved, idx, pos, +1); persist(); },
+        { title: "Next widget" });
+      row.append(tag, prev, cycle, next);
+      return row;
+    };
+
+    card.appendChild(makePickerRow("TOP", "top"));
+    if (isPair) card.appendChild(makePickerRow("BOT", "bottom"));
+
+    root.appendChild(card);
+  });
+
+  const hint = document.createElement("div");
+  hint.className = "widgets-col-hint";
+  hint.textContent = "tap PAIR to stack two widgets in a column · picking a placed widget swaps slots";
+  root.appendChild(hint);
+
+  const reset = mkBtn("widgets-reset", "RESET TO DEFAULTS", () => {
+    _wClearConfig(layout);
+    applyWidgetConfig(layout);
+    _renderWidgetsModal();
+  });
   root.appendChild(reset);
 }
 
