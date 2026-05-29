@@ -471,15 +471,26 @@ body {
   display: none;
 }
 
-/* PROC half — keep the table; row height compresses naturally because
-   .proc-rows is overflow:hidden. Just shrink the type so more rows
-   survive the 50% height squeeze. */
+/* PROC half — without a fixed row height the flex-stretched .proc-row
+   children pile onto each other at half-column height and the text
+   overlaps. Pin each row to a small line-height + flex:0 so the
+   parent's overflow:hidden clips cleanly once the visible rows run
+   out, mirroring the slim-strip fix in the media block below. */
 .panel[data-col-mode="pair"] > .proc-half .proc-table {
   font-size: 10px;
+  line-height: 1.1;
 }
 .panel[data-col-mode="pair"] > .proc-half .proc-head,
 .panel[data-col-mode="pair"] > .proc-half .proc-row {
   grid-template-columns: 38px 1fr 34px 34px;
+}
+.panel[data-col-mode="pair"] > .proc-half .proc-row {
+  flex: 0 0 auto;
+  height: 13px;
+  line-height: 13px;
+}
+.panel[data-col-mode="pair"] > .proc-half .proc-rows {
+  gap: 0;
 }
 
 /* Peak rx/tx row inside the disk half. */

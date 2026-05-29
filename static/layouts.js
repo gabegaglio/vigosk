@@ -1455,65 +1455,67 @@ function _wApplyColumns(resolved) {
   const container = document.querySelector(cspec.container);
   if (!container) return;
 
+  // Pull each widget element out of its current home so columns can
+  // be (re)built in any order.
   const widgetById = new Map();
   cspec.widgets.forEach((w) => {
-    widgetById.set(w.id, { ...w, el: document.querySelector(w.selector) });
+    const el = document.querySelector(w.selector);
+    widgetById.set(w.id, { ...w, el });
+    if (el && el.parentElement) el.parentElement.removeChild(el);
   });
 
-  // All widget elements get detached up-front so each column can be
-  // rebuilt without worrying about move-during-iteration ordering
-  // bugs.
-  const allEls = [];
-  widgetById.forEach((w) => {
-    if (w.el) {
-      if (w.el.parentElement) w.el.parentElement.removeChild(w.el);
-      allEls.push(w.el);
-    }
-  });
-
-  const cols = Array.from(container.querySelectorAll('section.panel[data-col-id]'))
-    .sort((a, b) => (+a.dataset.colId) - (+b.dataset.colId));
+  // Sections are recreated from scratch every apply so column add /
+  // remove from the picker is just a config-array edit — no need to
+  // track section identity. Existing sections get wiped first.
+  Array.from(container.querySelectorAll('section.panel[data-col-id]'))
+    .forEach((s) => s.remove());
 
   const placed = new Set();
   let visibleCount = 0;
-  cols.forEach((col, idx) => {
-    const cfg = resolved.columns[idx] || { top: null, bottom: null };
-    const topW = cfg.top  ? widgetById.get(cfg.top)    : null;
-    const botW = cfg.bottom ? widgetById.get(cfg.bottom) : null;
-    const topOK = topW && topW.el && _wIsWidgetAvailable(topW);
-    const botOK = botW && botW.el && _wIsWidgetAvailable(botW);
+  resolved.columns.forEach((cfg, idx) => {
+    const section = document.createElement("section");
+    section.className = "panel";
+    section.dataset.colId = String(idx + 1);
 
-    col.classList.remove("split-panel");
+    // First-claim-wins: a widget id already placed in an earlier
+    // column shows as empty here. Lets the user configure freely
+    // without surprise swaps; the modal flags duplicates explicitly.
+    const wantTop = cfg.top && !placed.has(cfg.top) ? widgetById.get(cfg.top) : null;
+    const wantBot = cfg.bottom && !placed.has(cfg.bottom) ? widgetById.get(cfg.bottom) : null;
+    const topOK = wantTop && wantTop.el && _wIsWidgetAvailable(wantTop);
+    const botOK = wantBot && wantBot.el && _wIsWidgetAvailable(wantBot);
+
     if (!topOK && !botOK) {
-      col.hidden = true;
-      col.removeAttribute("data-col-mode");
+      // Empty column — drop the section entirely so the grid reflows.
       return;
     }
-    col.hidden = false;
     visibleCount++;
     if (topOK && botOK) {
-      col.setAttribute("data-col-mode", "pair");
-      col.classList.add("split-panel");
-      col.appendChild(topW.el);
-      col.appendChild(botW.el);
-      placed.add(topW.id);
-      placed.add(botW.id);
+      section.dataset.colMode = "pair";
+      section.classList.add("split-panel");
+      section.appendChild(wantTop.el);
+      section.appendChild(wantBot.el);
+      placed.add(wantTop.id);
+      placed.add(wantBot.id);
     } else {
-      col.setAttribute("data-col-mode", "single");
-      const w = topOK ? topW : botW;
-      col.appendChild(w.el);
+      section.dataset.colMode = "single";
+      const w = topOK ? wantTop : wantBot;
+      section.appendChild(w.el);
       placed.add(w.id);
     }
+    container.appendChild(section);
   });
 
-  // Widgets that didn't land in any column get parked back in the
-  // container, hidden, so a future re-apply can pick them up.
-  allEls.forEach((el) => {
-    if (!el.parentElement) {
-      container.appendChild(el);
-      el.classList.add("widget-hidden");
+  // Widgets that didn't land anywhere get parked at the end, hidden,
+  // so a later re-apply can pick them up without losing their event
+  // listeners or live-update bindings.
+  widgetById.forEach((w) => {
+    if (!w.el) return;
+    if (!w.el.parentElement) {
+      container.appendChild(w.el);
+      w.el.classList.add("widget-hidden");
     } else {
-      el.classList.remove("widget-hidden");
+      w.el.classList.remove("widget-hidden");
     }
   });
 
@@ -1597,25 +1599,14 @@ function _wPersistFromResolved(layout, resolved) {
 }
 
 // ── Column model helpers (modal-facing) ───────────────────────────
-// Slot identity is by column index + position ("top"/"bottom").
-// Cycling a slot rotates through (null, ...widget ids). Selecting
-// a widget that's already placed elsewhere SWAPS the two slots so
-// each widget appears in at most one column at a time.
-function _wColumnsFindSlot(columns, id) {
-  for (let i = 0; i < columns.length; i++) {
-    if (columns[i].top === id) return { col: i, pos: "top" };
-    if (columns[i].bottom === id) return { col: i, pos: "bottom" };
-  }
-  return null;
-}
-
+// Cycling a slot rotates through (OFF, ...widget ids) for the bottom
+// half and (...widget ids) for the top. Picking a widget that's
+// already used in another column does NOT swap — duplicates are
+// allowed in the config, and the apply step renders only the first
+// claim (later columns show "—DUP—" in the picker so the user can
+// spot it). The user can keep the duplicate or pick something else.
 function _wColumnsCycleSlot(resolved, colIdx, pos, dir) {
   const cspec = resolved.spec;
-  // Options: null ("OFF") + every widget id, skipping autohide-with-
-  // no-data widgets so the user can't choose a widget that won't
-  // render. The top half of a column is required to be non-null in
-  // the UI (it's the "primary"); the bottom is optional and offers
-  // OFF so the user can mark a column "single".
   const options = [null];
   cspec.widgets.forEach((w) => {
     if (w.autohide) {
@@ -1624,24 +1615,15 @@ function _wColumnsCycleSlot(resolved, colIdx, pos, dir) {
     }
     options.push(w.id);
   });
-  const allowOff = pos === "bottom";
-  const filtered = allowOff ? options : options.filter((o) => o !== null);
-
+  // Both top and bottom can be OFF — top OFF + bottom set means the
+  // bottom widget renders full-height; both OFF removes the column
+  // from the rendered grid.
   const col = resolved.columns[colIdx];
   const currentId = col[pos];
-  let cursor = filtered.indexOf(currentId);
+  let cursor = options.indexOf(currentId);
   if (cursor < 0) cursor = 0;
-  cursor = (cursor + dir + filtered.length) % filtered.length;
-  const target = filtered[cursor];
-
-  // Swap-on-collision so each widget id appears in at most one slot.
-  if (target !== null) {
-    const where = _wColumnsFindSlot(resolved.columns, target);
-    if (where && !(where.col === colIdx && where.pos === pos)) {
-      resolved.columns[where.col][where.pos] = currentId;
-    }
-  }
-  resolved.columns[colIdx][pos] = target;
+  cursor = (cursor + dir + options.length) % options.length;
+  resolved.columns[colIdx][pos] = options[cursor];
 }
 
 function _wColumnsSetMode(resolved, colIdx, mode) {
@@ -1649,16 +1631,18 @@ function _wColumnsSetMode(resolved, colIdx, mode) {
   if (mode === "single") {
     col.bottom = null;
   } else if (mode === "pair") {
-    // Promote to pair: pick the first available widget not already
-    // used as bottom. If none, leave it null and let the user pick.
     if (col.bottom == null) {
+      // Promote to pair with the first available widget. Preferred
+      // candidate is one not already used in another column, but it's
+      // OK to start with a duplicate — the user can immediately cycle
+      // away from it via the BOT picker.
       const used = new Set();
       resolved.columns.forEach((c) => {
-        if (c.top) used.add(c.top);
+        if (c.top)    used.add(c.top);
         if (c.bottom) used.add(c.bottom);
       });
       const cspec = resolved.spec;
-      const cand = cspec.widgets.find((w) => {
+      let cand = cspec.widgets.find((w) => {
         if (used.has(w.id)) return false;
         if (w.autohide) {
           const el = document.querySelector(w.selector);
@@ -1666,15 +1650,68 @@ function _wColumnsSetMode(resolved, colIdx, mode) {
         }
         return true;
       });
+      if (!cand) {
+        cand = cspec.widgets.find((w) => {
+          if (w.autohide) {
+            const el = document.querySelector(w.selector);
+            if (el && el.hidden) return false;
+          }
+          return true;
+        });
+      }
       col.bottom = cand ? cand.id : null;
     }
   }
+}
+
+function _wColumnsAdd(resolved) {
+  // Append a new column seeded with the first unused widget so the
+  // user sees something immediately instead of an empty card.
+  const used = new Set();
+  resolved.columns.forEach((c) => {
+    if (c.top)    used.add(c.top);
+    if (c.bottom) used.add(c.bottom);
+  });
+  const cspec = resolved.spec;
+  const cand = cspec.widgets.find((w) => {
+    if (used.has(w.id)) return false;
+    if (w.autohide) {
+      const el = document.querySelector(w.selector);
+      if (el && el.hidden) return false;
+    }
+    return true;
+  });
+  resolved.columns.push({ top: cand ? cand.id : null, bottom: null });
+}
+
+function _wColumnsRemove(resolved, colIdx) {
+  if (resolved.columns.length <= 1) {
+    // Always keep at least one column — emptying it clears both
+    // widgets but preserves the row in the picker.
+    resolved.columns[0] = { top: null, bottom: null };
+    return;
+  }
+  resolved.columns.splice(colIdx, 1);
 }
 
 function _wColumnLabel(cspec, id) {
   if (!id) return "— OFF";
   const w = cspec.widgets.find((x) => x.id === id);
   return w ? w.label : "?";
+}
+
+// Returns true when this slot's widget id is already taken by an
+// earlier slot — the picker uses this to flag duplicates so the
+// user understands why their pick isn't rendering.
+function _wColumnsIsDup(columns, colIdx, pos) {
+  const id = columns[colIdx][pos];
+  if (!id) return false;
+  for (let i = 0; i < colIdx; i++) {
+    if (columns[i].top === id) return true;
+    if (columns[i].bottom === id) return true;
+  }
+  if (pos === "bottom" && columns[colIdx].top === id) return true;
+  return false;
 }
 
 // Cycle slot `idx` to the next widget TYPE in the rotation.
@@ -1886,8 +1923,6 @@ function _renderColumnsModal(root, layout, resolved) {
   resolved.columns.forEach((col, idx) => {
     const isPair = col.bottom != null;
 
-    // Each column is a card with two rows (TOP / BOTTOM picker) plus
-    // a header that owns the mode toggle.
     const card = document.createElement("div");
     card.className = "widgets-col-card";
 
@@ -1909,26 +1944,38 @@ function _renderColumnsModal(root, layout, resolved) {
     );
     head.appendChild(modeBtn);
 
+    const removeBtn = mkBtn(
+      "widgets-col-remove",
+      "✕",
+      () => { _wColumnsRemove(resolved, idx); persist(); },
+      { title: "Remove this column" }
+    );
+    head.appendChild(removeBtn);
+
     card.appendChild(head);
 
-    const makePickerRow = (label, pos) => {
+    const makePickerRow = (label, posKey) => {
       const row = document.createElement("div");
       row.className = "widgets-row widgets-col-row";
+      const isDup = _wColumnsIsDup(resolved.columns, idx, posKey);
+      if (isDup) row.classList.add("dup");
       const tag = document.createElement("span");
       tag.className = "widgets-pos";
       tag.textContent = label;
       const prev = mkBtn("widgets-move", "◀",
-        () => { _wColumnsCycleSlot(resolved, idx, pos, -1); persist(); },
+        () => { _wColumnsCycleSlot(resolved, idx, posKey, -1); persist(); },
         { title: "Previous widget" });
+      const widgetLabel = _wColumnLabel(cspec, col[posKey]);
+      const text = isDup ? widgetLabel + "  · DUP" : widgetLabel;
       const cycle = mkBtn(
-        "widgets-cycle on",
-        _wColumnLabel(cspec, col[pos]),
-        () => { _wColumnsCycleSlot(resolved, idx, pos, +1); persist(); },
-        { title: "Cycle widget" }
+        "widgets-cycle" + (col[posKey] ? " on" : "") + (isDup ? " dup" : ""),
+        text,
+        () => { _wColumnsCycleSlot(resolved, idx, posKey, +1); persist(); },
+        { title: isDup ? "Already used in an earlier column — pick a different one"
+                       : "Cycle widget" }
       );
-      if (col[pos] == null) cycle.classList.remove("on");
       const next = mkBtn("widgets-move", "▶",
-        () => { _wColumnsCycleSlot(resolved, idx, pos, +1); persist(); },
+        () => { _wColumnsCycleSlot(resolved, idx, posKey, +1); persist(); },
         { title: "Next widget" });
       row.append(tag, prev, cycle, next);
       return row;
@@ -1940,9 +1987,20 @@ function _renderColumnsModal(root, layout, resolved) {
     root.appendChild(card);
   });
 
+  const actions = document.createElement("div");
+  actions.className = "widgets-col-actions";
+  const addBtn = mkBtn(
+    "widgets-col-add",
+    "+ ADD COLUMN",
+    () => { _wColumnsAdd(resolved); persist(); },
+    { title: "Add a new column at the end" }
+  );
+  actions.appendChild(addBtn);
+  root.appendChild(actions);
+
   const hint = document.createElement("div");
   hint.className = "widgets-col-hint";
-  hint.textContent = "tap PAIR to stack two widgets in a column · picking a placed widget swaps slots";
+  hint.textContent = "tap PAIR to stack two widgets · ✕ removes a column · DUP marks a widget already used elsewhere";
   root.appendChild(hint);
 
   const reset = mkBtn("widgets-reset", "RESET TO DEFAULTS", () => {
@@ -2277,3 +2335,4 @@ window.addEventListener("keydown", (e) => {
     case "4": e.preventDefault(); applyLayout("flowstrip"); break;
   }
 }, true);
+
