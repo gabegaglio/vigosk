@@ -1664,34 +1664,13 @@ function _wColumnsSetMode(resolved, colIdx, mode) {
   }
 }
 
-function _wColumnsAdd(resolved) {
-  // Append a new column seeded with the first unused widget so the
-  // user sees something immediately instead of an empty card.
-  const used = new Set();
-  resolved.columns.forEach((c) => {
-    if (c.top)    used.add(c.top);
-    if (c.bottom) used.add(c.bottom);
-  });
-  const cspec = resolved.spec;
-  const cand = cspec.widgets.find((w) => {
-    if (used.has(w.id)) return false;
-    if (w.autohide) {
-      const el = document.querySelector(w.selector);
-      if (el && el.hidden) return false;
-    }
-    return true;
-  });
-  resolved.columns.push({ top: cand ? cand.id : null, bottom: null });
-}
-
-function _wColumnsRemove(resolved, colIdx) {
-  if (resolved.columns.length <= 1) {
-    // Always keep at least one column — emptying it clears both
-    // widgets but preserves the row in the picker.
-    resolved.columns[0] = { top: null, bottom: null };
-    return;
-  }
-  resolved.columns.splice(colIdx, 1);
+// Clearing a column drops both widget picks but preserves the row
+// in the picker, so the user can re-enable the column later by
+// cycling its TOP picker to a widget — no separate "add column"
+// flow needed. Apply skips columns with nothing set, so the grid
+// reflows like the column was removed.
+function _wColumnsClear(resolved, colIdx) {
+  resolved.columns[colIdx] = { top: null, bottom: null };
 }
 
 function _wColumnLabel(cspec, id) {
@@ -1944,13 +1923,13 @@ function _renderColumnsModal(root, layout, resolved) {
     );
     head.appendChild(modeBtn);
 
-    const removeBtn = mkBtn(
+    const clearBtn = mkBtn(
       "widgets-col-remove",
       "✕",
-      () => { _wColumnsRemove(resolved, idx); persist(); },
-      { title: "Remove this column" }
+      () => { _wColumnsClear(resolved, idx); persist(); },
+      { title: "Clear both picks (column hides until you cycle TOP back to a widget)" }
     );
-    head.appendChild(removeBtn);
+    head.appendChild(clearBtn);
 
     card.appendChild(head);
 
@@ -1987,20 +1966,9 @@ function _renderColumnsModal(root, layout, resolved) {
     root.appendChild(card);
   });
 
-  const actions = document.createElement("div");
-  actions.className = "widgets-col-actions";
-  const addBtn = mkBtn(
-    "widgets-col-add",
-    "+ ADD COLUMN",
-    () => { _wColumnsAdd(resolved); persist(); },
-    { title: "Add a new column at the end" }
-  );
-  actions.appendChild(addBtn);
-  root.appendChild(actions);
-
   const hint = document.createElement("div");
   hint.className = "widgets-col-hint";
-  hint.textContent = "tap PAIR to stack two widgets · ✕ removes a column · DUP marks a widget already used elsewhere";
+  hint.textContent = "tap PAIR to stack two widgets · ✕ clears a column · DUP marks a widget already used elsewhere";
   root.appendChild(hint);
 
   const reset = mkBtn("widgets-reset", "RESET TO DEFAULTS", () => {

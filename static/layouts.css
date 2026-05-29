@@ -1377,31 +1377,6 @@
   background: rgba(217, 118, 118, 0.10);
   transform: scale(0.96);
 }
-.widgets-col-actions {
-  display: flex; justify-content: center;
-  margin-top: 4px;
-}
-.widgets-col-add {
-  background: var(--panel-2);
-  color: var(--accent);
-  border: 1px dashed var(--accent-3);
-  border-radius: 2px;
-  padding: 8px 16px;
-  font-family: inherit;
-  font-size: 11px; font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  cursor: pointer;
-  touch-action: manipulation;
-  user-select: none; -webkit-user-select: none;
-  transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease;
-  min-width: 60%;
-}
-.widgets-col-add:hover { border-color: var(--accent); }
-.widgets-col-add:active {
-  background: rgba(106, 176, 255, 0.18);
-  transform: scale(0.97);
-}
 /* Duplicate slot — the widget id this slot claims is already used
    in an earlier column, so the apply step won't render it here.
    Soft-warn the user by recolouring the cycle button instead of
