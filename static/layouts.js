@@ -354,8 +354,7 @@ window.layoutOnTick = function (s, sm) {
   _gSetText(document.getElementById("g-cpu-pct"), cpuPct.toFixed(0) + "%");
   _gSetArc (document.getElementById("g-cpu-arc"), cpuPct);
   const cpuTemp = s.cpu && s.cpu.temp_c;
-  _gSetText(document.getElementById("g-cpu-sub"),
-    cpuTemp != null ? cpuTemp.toFixed(0) + " °C" : "— °C");
+  _gSetText(document.getElementById("g-cpu-sub"), window.__kioskFmtTemp(cpuTemp));
 
   // ── MEM dial ──
   _gSetText(document.getElementById("g-mem-pct"), memPct.toFixed(0) + "%");
@@ -393,7 +392,7 @@ window.layoutOnTick = function (s, sm) {
     _gSetText(document.getElementById("g-gpu-pct"), (gpu.busy || 0).toFixed(0) + "%");
     _gSetArc (document.getElementById("g-gpu-arc"), gpu.busy || 0);
     let sub = "—";
-    if (gpu.temp_c != null) sub = gpu.temp_c.toFixed(0) + " °C";
+    if (gpu.temp_c != null) sub = window.__kioskFmtTemp(gpu.temp_c);
     else if (gpu.power_w != null) sub = gpu.power_w.toFixed(1) + " W";
     _gSetText(document.getElementById("g-gpu-sub"), sub);
   } else {
@@ -491,15 +490,19 @@ window.layoutOnTick = function (s, sm) {
   // ── Processes (throttled by the caller) ──
   if (Array.isArray(s.procs_top)) {
     _gSetText(document.getElementById("g-procs-meta"), s.procs + " total");
+    // Honour the user's chosen process sort (set via the default
+    // layout's column headers) so switching layouts keeps one ordering.
+    const procList = (typeof window.__kioskSortProcs === "function")
+      ? window.__kioskSortProcs(s.procs_top) : s.procs_top;
     // clientHeight is 0 while gauges layout is display:none. Skip the
     // resize in that case — when the user activates this layout the
     // next tick will measure correctly.
     const fit = _gMaxProcRows();
-    const visible = fit > 0 ? Math.min(s.procs_top.length, fit) : s.procs_top.length;
+    const visible = fit > 0 ? Math.min(procList.length, fit) : procList.length;
     _gEnsureProcRows(visible);
     const root = document.getElementById("g-procs-rows");
     for (let i = 0; i < visible; i++) {
-      const p = s.procs_top[i];
+      const p = procList[i];
       const row = root.children[i];
       _gSetText(row.children[0], String(p.pid));
       if (row.children[1].textContent !== p.name) {
@@ -1061,7 +1064,7 @@ function _renderFlowstrip(s, sm) {
   _gSetText(document.getElementById("fs-cpu-pct"), cpuPct.toFixed(0) + "%");
   if (s.cpu) {
     // Sub-line mirrors the reference: "59°C · I7-6700"
-    const tempStr = s.cpu.temp_c != null ? s.cpu.temp_c.toFixed(0) + "°C" : "—";
+    const tempStr = window.__kioskFmtTemp(s.cpu.temp_c, { compact: true, dash: "—" });
     const modelStr = (s.cpu.model || "").replace(/Intel\s+Core\s+/i, "").trim() || "—";
     _gSetText(document.getElementById("fs-cpu-sub"), tempStr + " · " + modelStr);
   }
@@ -1093,7 +1096,7 @@ function _renderFlowstrip(s, sm) {
     // "8.7 W · HD 530" style sub-line — power on the left, short
     // model name on the right. Falls back to temp if no power sensor.
     const powerStr = gpu.power_w != null ? gpu.power_w.toFixed(1) + " W"
-      : (gpu.temp_c != null ? gpu.temp_c.toFixed(0) + "°C" : "—");
+      : window.__kioskFmtTemp(gpu.temp_c, { compact: true, dash: "—" });
     const gpuModel = (gpu.model || "").replace(/^Intel\s+/i, "").replace(/Graphics/i, "").trim() || "GPU";
     _gSetText(document.getElementById("fs-gpu-sub"), powerStr + " · " + gpuModel);
     if (renderSpark && hist && hist.gpu) {
@@ -1643,14 +1646,15 @@ function _wPersistFromResolved(layout, resolved) {
 // spot it). The user can keep the duplicate or pick something else.
 function _wColumnsCycleSlot(resolved, colIdx, pos, dir) {
   const cspec = resolved.spec;
+  // Include autohide widgets (GPU, CONTAINERS) in the rotation even
+  // when they currently have no data and are hidden — otherwise the
+  // user can never assign a slot to the container-health widget before
+  // configuring its targets, and it stays undiscoverable in the picker.
+  // A slot pointed at an unavailable widget simply renders nothing (the
+  // column collapses to its other half) until the data starts flowing,
+  // at which point the availability watcher re-applies and it appears.
   const options = [null];
-  cspec.widgets.forEach((w) => {
-    if (w.autohide) {
-      const el = document.querySelector(w.selector);
-      if (el && el.hidden) return;
-    }
-    options.push(w.id);
-  });
+  cspec.widgets.forEach((w) => { options.push(w.id); });
   // Both top and bottom can be OFF — top OFF + bottom set means the
   // bottom widget renders full-height; both OFF removes the column
   // from the rendered grid.

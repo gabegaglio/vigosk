@@ -150,6 +150,103 @@ function tempColor(t) {
   return "var(--crit)";
 }
 
+// ── Temperature unit (°C / °F) ─────────────────────────────────────
+// Single source of truth for every temperature shown anywhere (CPU,
+// GPU, all layouts). The server always reports Celsius; we convert
+// only on display and never store both. Colour thresholds stay keyed
+// off the raw Celsius value so the warn/crit bands are unit-agnostic.
+const TEMP_UNITS = ["C", "F"];
+let currentTempUnit = (() => {
+  try {
+    const v = localStorage.getItem("kiosk.tempUnit");
+    if (TEMP_UNITS.includes(v)) return v;
+  } catch (e) {}
+  return "C";
+})();
+// fmtTemp(celsius, opts): opts.compact drops the space before °,
+// opts.noUnit returns the bare number, opts.digits sets precision,
+// opts.dash is the string used when celsius is null/undefined.
+function fmtTemp(c, opts) {
+  opts = opts || {};
+  if (c == null) return opts.dash != null ? opts.dash : ("— °" + currentTempUnit);
+  const digits = opts.digits != null ? opts.digits : 0;
+  const val = currentTempUnit === "F" ? (c * 9 / 5 + 32) : c;
+  const num = val.toFixed(digits);
+  if (opts.noUnit) return num;
+  return num + (opts.compact ? "" : " ") + "°" + currentTempUnit;
+}
+// Exposed so layouts.js renders temps through the same converter.
+window.__kioskFmtTemp = (c, opts) => fmtTemp(c, opts);
+window.__kioskTempUnit = () => currentTempUnit;
+
+function setTempUnit(u) {
+  currentTempUnit = (u === "F") ? "F" : "C";
+  try { localStorage.setItem("kiosk.tempUnit", currentTempUnit); } catch (e) {}
+  const valEl = document.getElementById("settings-temp-value");
+  if (valEl) valEl.textContent = "°" + currentTempUnit;
+}
+function cycleTempUnit() { setTempUnit(currentTempUnit === "C" ? "F" : "C"); }
+
+// ── Process sort (client-side over the server's top-N list) ────────
+// The server returns the top processes already ranked by CPU; the user
+// can re-sort the displayed list by CPU, MEM, or PID and toggle the
+// direction by tapping the same column header again. cpu/mem default
+// to high→low (most useful at a glance); pid defaults to low→high.
+const PROC_SORT_FIELDS = ["cpu", "mem", "pid"];
+const PROC_SORT_DEFAULT_DIR = { cpu: -1, mem: -1, pid: 1 }; // -1 = desc, +1 = asc
+let procSortField = (() => {
+  try {
+    const v = localStorage.getItem("kiosk.procSort");
+    if (PROC_SORT_FIELDS.includes(v)) return v;
+  } catch (e) {}
+  return "cpu";
+})();
+let procSortDir = (() => {
+  try {
+    const v = parseInt(localStorage.getItem("kiosk.procSortDir"), 10);
+    if (v === 1 || v === -1) return v;
+  } catch (e) {}
+  return -1;
+})();
+
+function sortProcs(arr) {
+  const f = procSortField, d = procSortDir;
+  const copy = arr.slice();
+  copy.sort((a, b) => {
+    const av = f === "pid" ? a.pid : (f === "mem" ? a.mem : a.cpu);
+    const bv = f === "pid" ? b.pid : (f === "mem" ? b.mem : b.cpu);
+    if (av === bv) return a.pid - b.pid;     // stable tiebreak by PID
+    return (av < bv ? -1 : 1) * d;
+  });
+  return copy;
+}
+// Exposed so the gauges layout's process card honours the same sort.
+window.__kioskSortProcs = sortProcs;
+
+function _updateProcSortIndicators() {
+  document.querySelectorAll(".proc-sort").forEach((el) => {
+    const base = el.dataset.label || (el.dataset.label = el.textContent.replace(/\s*[▲▼]\s*$/, ""));
+    if (el.dataset.sort === procSortField) {
+      el.classList.add("active");
+      el.textContent = base + (procSortDir === 1 ? "▲" : "▼");
+    } else {
+      el.classList.remove("active");
+      el.textContent = base;
+    }
+  });
+}
+function setProcSort(field) {
+  if (!PROC_SORT_FIELDS.includes(field)) return;
+  if (procSortField === field) procSortDir = -procSortDir;
+  else { procSortField = field; procSortDir = PROC_SORT_DEFAULT_DIR[field]; }
+  try {
+    localStorage.setItem("kiosk.procSort", procSortField);
+    localStorage.setItem("kiosk.procSortDir", String(procSortDir));
+  } catch (e) {}
+  _updateProcSortIndicators();
+  if (_lastStats) renderProcs(_lastStats);   // re-render immediately
+}
+
 // ── DOM helpers ────────────────────────────────────────────────────
 function setBar(fillEl, pct) {
   pct = Math.max(0, Math.min(100, pct));
@@ -473,10 +570,11 @@ function setStyle(el, prop, v) { if (el && el.style[prop] !== v) el.style[prop] 
 function renderProcs(s) {
   if (!Array.isArray(s.procs_top)) return;
   setText(document.getElementById("proc-meta"), s.procs + " total");
-  ensureProcRows(s.procs_top.length);
+  const list = sortProcs(s.procs_top);
+  ensureProcRows(list.length);
   const root = document.getElementById("proc-rows");
-  for (let i = 0; i < s.procs_top.length; i++) {
-    const p = s.procs_top[i];
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
     const row = root.children[i];
     setText(row.children[0], String(p.pid));
     if (row.children[1].textContent !== p.name) {
@@ -564,6 +662,9 @@ function renderContainers(c) {
 let coresBuilt = false;
 let lastClockSec = -1;
 let frame = 0;
+// Last stats snapshot — lets a sort-control tap re-render the process
+// list instantly without waiting for the next poll.
+let _lastStats = null;
 // Exposed so layouts.js can pass the same per-tick counter to its own
 // renderSpark calls — needed to keep flat-value graphs (GPU at 0%,
 // idle disk i/o, …) advancing every tick instead of freezing on
@@ -575,6 +676,7 @@ async function refresh() {
   try {
     const r = await fetch("api/stats", { cache: "no-store" });
     s = await r.json();
+    _lastStats = s;
   } catch (e) { return; }
 
   try {
@@ -623,11 +725,7 @@ async function refresh() {
     const tempEl = document.getElementById("cpu-temp");
     if (tempEl) {
       const t = s.cpu.temp_c;
-      if (t == null) {
-        setText(tempEl, "— °C");
-      } else {
-        setText(tempEl, t.toFixed(0) + " °C");
-      }
+      setText(tempEl, fmtTemp(t));
       setStyle(tempEl, "color", tempColor(t));
       setStyle(tempEl, "borderColor", tempColor(t));
     }
@@ -678,7 +776,7 @@ async function refresh() {
       // CPU panel on integrated GPUs (where there's no separate sensor).
       const goEl = document.getElementById("gpu-readout");
       if (gpu.temp_c != null) {
-        setText(goEl, gpu.temp_c.toFixed(0) + " °C");
+        setText(goEl, fmtTemp(gpu.temp_c));
         setStyle(goEl, "color", tempColor(gpu.temp_c));
         setStyle(goEl, "borderColor", tempColor(gpu.temp_c));
       } else if (gpu.power_w != null) {
@@ -958,8 +1056,10 @@ function openSettingsModal() {
   const valTheme  = document.getElementById("settings-theme-value");
   const valGraph  = document.getElementById("settings-graph-value");
   const valLayout = document.getElementById("settings-layout-value");
+  const valTemp   = document.getElementById("settings-temp-value");
   if (valTheme)  valTheme.textContent  = THEME_LABELS[currentTheme] || "—";
   if (valGraph)  valGraph.textContent  = GRAPH_LABELS[currentGraphStyle] || "—";
+  if (valTemp)   valTemp.textContent   = "°" + currentTempUnit;
   if (valLayout && typeof window.__kioskCurrentLayoutLabel === "function") {
     valLayout.textContent = window.__kioskCurrentLayoutLabel() || "—";
   }
@@ -1002,7 +1102,6 @@ function _wireSettingsBtn(id, opener) {
   el.addEventListener("pointerdown", (e) => e.stopPropagation());
   el.addEventListener("pointerup",   (e) => e.stopPropagation());
 }
-_wireSettingsBtn("settings-theme-btn",  openThemeModal);
 _wireSettingsBtn("settings-layout-btn", () => {
   if (typeof window.__kioskOpenLayouts === "function") window.__kioskOpenLayouts();
 });
@@ -1010,6 +1109,26 @@ _wireSettingsBtn("settings-graph-btn",  openGraphModal);
 _wireSettingsBtn("settings-widgets-btn", () => {
   if (typeof window.__kioskOpenWidgets === "function") window.__kioskOpenWidgets();
 });
+
+// THEME row cycles inline instead of opening a modal — selecting it
+// advances to the next theme (wrapping at the end) and applies
+// immediately, with the current theme name shown in the row's value.
+// A modal of swatches doesn't scale as themes are added; inline
+// cycling does. The theme picker modal is still reachable via the `t`
+// keyboard shortcut for users who want the full grid. The settings
+// modal stays open so taps can keep cycling.
+function _wireInlineSettingsBtn(id, onTap) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const tap = (e) => { e.stopPropagation(); e.preventDefault(); onTap(); };
+  el.addEventListener("click", tap);
+  el.addEventListener("pointerdown", (e) => e.stopPropagation());
+  el.addEventListener("pointerup",   (e) => e.stopPropagation());
+}
+_wireInlineSettingsBtn("settings-theme-btn", () => cycleTheme(+1));
+// TEMP UNIT row toggles °C ↔ °F inline — applied everywhere on the
+// next tick since every temperature renders through fmtTemp().
+_wireInlineSettingsBtn("settings-temp-btn", () => cycleTempUnit());
 
 // X close on the settings modal — single tap fully dismisses settings,
 // no chained reopen. Background tap still works (existing handler).
@@ -1265,6 +1384,26 @@ _wireSettingsBtn("settings-network-btn",    openNetworkModal);
 _wireSettingsBtn("settings-containers-btn", openContainersModal);
 _wireBackBtn("network-modal",    closeNetworkModal);
 _wireBackBtn("containers-modal", closeContainersModal);
+
+// ── Process sort controls ──────────────────────────────────────────
+// PID / CPU% / MEM% headers are tappable: first tap selects that
+// field (using its natural default direction), repeat taps flip the
+// direction. The active header shows a ▲/▼ arrow.
+(function _wireProcSort() {
+  document.querySelectorAll(".proc-sort").forEach((el) => {
+    const tap = (e) => { e.stopPropagation(); e.preventDefault(); setProcSort(el.dataset.sort); };
+    el.addEventListener("click", tap);
+    el.addEventListener("pointerdown", (e) => e.stopPropagation());
+    el.addEventListener("pointerup",   (e) => e.stopPropagation());
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") tap(e);
+    });
+  });
+  _updateProcSortIndicators();
+})();
+
+// Reflect persisted temp unit in the settings row label on load.
+setTempUnit(currentTempUnit);
 
 loadKioskConfig();
 armRefresh();

@@ -19,9 +19,9 @@
 <div class="vigosk-menu" id="vigosk-menu" aria-hidden="true">
   <div class="vigosk-menu-title" aria-label="VIGOSK">VIGOSK</div>
   <div class="vigosk-menu-actions">
-    <button class="vigosk-menu-action" id="vigosk-settings-btn">SETTINGS</button>
-    <button class="vigosk-menu-action" id="vigosk-quit-btn">QUIT</button>
+    <button class="vigosk-menu-action" id="vigosk-settings-btn">OPTIONS</button>
     <button class="vigosk-menu-action" id="vigosk-help-btn">HELP</button>
+    <button class="vigosk-menu-action" id="vigosk-quit-btn">QUIT</button>
   </div>
   <div class="vigosk-menu-hint">↑↓←→ navigate · enter select · esc close</div>
 </div>
@@ -51,7 +51,7 @@
 <div class="theme-modal settings-modal" id="settings-modal" aria-hidden="true">
   <div class="theme-modal-box">
     <button class="modal-close" id="settings-close" aria-label="Close settings">×</button>
-    <div class="theme-modal-title">SETTINGS</div>
+    <div class="theme-modal-title">OPTIONS</div>
     <div class="settings-grid">
       <button class="settings-btn" id="settings-layout-btn">
         <span class="settings-btn-label">LAYOUT</span>
@@ -72,6 +72,10 @@
       <button class="settings-btn" id="settings-graph-btn">
         <span class="settings-btn-label">LINE MODE</span>
         <span class="settings-btn-value" id="settings-graph-value">—</span>
+      </button>
+      <button class="settings-btn" id="settings-temp-btn">
+        <span class="settings-btn-label">TEMP UNIT</span>
+        <span class="settings-btn-value" id="settings-temp-value">°C</span>
       </button>
       <button class="settings-btn" id="settings-theme-btn">
         <span class="settings-btn-label">THEME</span>
@@ -345,7 +349,7 @@
       </div>
       <div class="proc-table">
         <div class="proc-head">
-          <span>PID</span><span>NAME</span><span>CPU%</span><span>MEM%</span>
+          <span class="proc-sort" data-sort="pid" role="button" tabindex="0" title="Sort by PID">PID</span><span>NAME</span><span class="proc-sort" data-sort="cpu" role="button" tabindex="0" title="Sort by CPU%">CPU%</span><span class="proc-sort" data-sort="mem" role="button" tabindex="0" title="Sort by MEM%">MEM%</span>
         </div>
         <div class="proc-rows" id="proc-rows"></div>
       </div>

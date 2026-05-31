@@ -614,6 +614,22 @@ body {
 }
 .proc-row .cpu, .proc-row .mem { text-align: right; font-weight: 600; }
 
+/* Sortable column headers — tap PID / CPU% / MEM% to sort the list;
+   tapping the active one flips direction. The active header glows
+   accent and carries a ▲/▼ arrow (added in JS). */
+.proc-sort {
+  cursor: pointer;
+  user-select: none; -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: color 0.12s ease;
+  white-space: nowrap;
+}
+.proc-head .proc-sort[data-sort="cpu"],
+.proc-head .proc-sort[data-sort="mem"] { text-align: right; }
+.proc-sort:hover { color: var(--accent-2); }
+.proc-sort.active { color: var(--accent); }
+.proc-sort:focus-visible { outline: 1px solid var(--accent-3); outline-offset: 1px; }
+
 /* ── Container health widget ───────────────────────────────────────
    One row per watched container: status dot · name · host · RTT.
    up=green, down=red, pending(neutral) until the first probe lands. */
@@ -685,16 +701,26 @@ body::after {
 }
 .theme-toast.show { opacity: 1; }
 
-/* ── Theme picker modal ────────────────────────────────────────── */
+/* ── Theme picker modal ────────────────────────────────────────────
+   Settings + every sub-modal share this scaffolding. The backdrop and
+   box are tuned to match the VIGOSK main menu's modern look: a soft
+   blurred translucent backdrop (so the live kiosk keeps showing
+   through) and a frameless box held together by an accent halo + glow
+   instead of a hard 1px border, so navigating menu → settings →
+   sub-modal feels seamless rather than switching visual styles. */
 .theme-modal {
   position: fixed; inset: 0; z-index: 3000;
   display: none; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(6px) saturate(0.85);
+  -webkit-backdrop-filter: blur(6px) saturate(0.85);
 }
 .theme-modal.show { display: flex; }
 .theme-modal-box {
   position: relative;
-  background: var(--panel); border: 1px solid var(--border);
+  background: var(--panel); border: none;
+  box-shadow: 0 0 0 1px var(--accent-3), 0 0 26px rgba(0, 0, 0, 0.45),
+              0 0 44px var(--accent-3);
   border-radius: 4px;
   /* Larger padding gives the absolute-positioned ← BACK / × buttons
      a dedicated band of whitespace at the top so they never overlap
@@ -745,9 +771,14 @@ body::after {
   background: rgba(106, 176, 255, 0.18);
 }
 .theme-modal-title {
-  color: var(--accent); font-weight: 700; letter-spacing: 3px;
+  color: var(--accent); font-weight: 700;
+  letter-spacing: clamp(3px, 0.9vh, 8px);
   font-size: clamp(12px, 1.8vh, 18px);
   text-align: center;
+  /* Accent glow mirrors the VIGOSK menu title so the two layers read
+     as the same design language. */
+  text-shadow: 0 0 8px var(--accent-3);
+  text-transform: uppercase;
   margin-top: clamp(4px, 0.8vh, 10px);
   margin-bottom: clamp(12px, 2vh, 24px);
 }
