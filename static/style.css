@@ -405,16 +405,21 @@ body {
   padding: 5px 8px 6px;
   overflow: hidden;
 }
+/* Paired halves split their column 50/50 so no single widget can
+   dominate. The NET half is additionally capped at half the column
+   height (max-height:50%) so its WAN/LAN/PING stack never balloons
+   past its partner — see the condensed net typography further down. */
 .split-panel .disk-half,
-.panel[data-col-mode="pair"] > .disk-half { flex: 0.85 1 0; }
+.panel[data-col-mode="pair"] > .disk-half { flex: 1 1 0; }
 .split-panel .net-half,
-.panel[data-col-mode="pair"] > .net-half  { flex: 1.15 1 0; }
+.panel[data-col-mode="pair"] > .net-half  { flex: 1 1 0; max-height: 50%; }
 .split-panel .cpu-half,
 .panel[data-col-mode="pair"] > .cpu-half  { flex: 1 1 0; }
 .split-panel .gpu-half,
 .panel[data-col-mode="pair"] > .gpu-half  { flex: 1 1 0; }
 .panel[data-col-mode="pair"] > .mem-half,
-.panel[data-col-mode="pair"] > .proc-half { flex: 1 1 0; }
+.panel[data-col-mode="pair"] > .proc-half,
+.panel[data-col-mode="pair"] > .containers-half { flex: 1 1 0; }
 /* Divider between two paired halves — applies to the second half
    regardless of which widget got placed there. */
 .panel[data-col-mode="pair"] > .panel-half + .panel-half {
@@ -608,6 +613,49 @@ body {
   overflow: hidden; text-overflow: ellipsis;
 }
 .proc-row .cpu, .proc-row .mem { text-align: right; font-weight: 600; }
+
+/* ── Container health widget ───────────────────────────────────────
+   One row per watched container: status dot · name · host · RTT.
+   up=green, down=red, pending(neutral) until the first probe lands. */
+.containers-list {
+  display: flex; flex-direction: column;
+  flex: 1 1 auto; min-height: 0; overflow: hidden;
+  font-size: 11px; line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  gap: 1px;
+}
+.ctr-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto auto;
+  gap: 6px; align-items: center;
+  flex: 0 0 auto; min-height: 0;
+  padding: 1px 2px;
+}
+.ctr-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--dim); justify-self: center;
+  box-shadow: 0 0 4px currentColor; color: var(--dim);
+}
+.ctr-row.ctr-up   .ctr-dot { background: var(--good); color: var(--good); }
+.ctr-row.ctr-down .ctr-dot { background: var(--crit); color: var(--crit); }
+.ctr-row.ctr-pending .ctr-dot { background: var(--dim); color: var(--dim); }
+.ctr-name {
+  color: var(--fg); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.ctr-host {
+  color: var(--dim); font-size: 10px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 11ch; text-align: right;
+}
+.ctr-ms { text-align: right; font-weight: 600; color: var(--fg-bright); }
+.ctr-row.ctr-down .ctr-ms { color: var(--crit); }
+.ctr-row.ctr-pending .ctr-ms { color: var(--dim); }
+/* Condensed typography when the widget shares a column (pair mode). */
+.panel[data-col-mode="pair"] > .containers-half .containers-list,
+.split-panel > .containers-half .containers-list { font-size: 10px; }
+.panel[data-col-mode="pair"] > .containers-half .ctr-row,
+.split-panel > .containers-half .ctr-row { padding: 0 2px; }
 
 /* Subtle scanline overlay for cyberpunk vibe — very faint. */
 body::after {

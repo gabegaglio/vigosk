@@ -66,9 +66,25 @@ vigosk [OPTIONS]
 | `VIGOSK_BROWSER`  | Browser binary to launch (default: chromium)         |
 | `VIGOSK_HOST`     | Bind address — same as `--host`                      |
 | `VIGOSK_PORT`     | Bind port — same as `--port`                         |
-| `PING_EXT`        | External ping target (default: `1.1.1.1`)            |
+| `VIGOSK_CONFIG`   | Path to the runtime config JSON (ping targets + container watch list). Defaults next to `metrics.py`, else `~/.config/vigosk/config.json` |
+| `PING_EXT`        | Default external ping target (default: `1.1.1.1`); the Settings → NETWORK field overrides it at runtime |
 | `WAN_IFACE`       | WAN interface for net stats (auto-detected if unset) |
 | `LAN_IFACES`      | LAN interfaces for net stats (auto-detected if unset)|
+
+### Runtime settings (Kiosk Settings → `S`)
+
+Some settings are editable live from the kiosk UI and persisted server-side
+(the pings run in `metrics.py`), so they survive restarts:
+
+- **NETWORK** — gateway + external ping targets. Blank gateway = auto-detect
+  the default route (the original behavior); either field accepts an IP or
+  hostname and is validated before saving.
+- **CONTAINERS** — a watch list of `name → host` targets pinged for up/down
+  health (up = green, down = red, pending = neutral). The probe **interval**
+  (default 5 s) and a **max-per-cycle** cap (default 8) are configurable; when
+  the list is longer than the cap the pings stagger across cycles so the host
+  isn't flooded. The CONTAINERS widget autohides until at least one target is
+  configured.
 
 ---
 

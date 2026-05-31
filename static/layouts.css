@@ -1179,6 +1179,11 @@
 }
 .widgets-row.off { opacity: 0.65; }
 .widgets-row.anchor { border-color: var(--accent-3); }
+/* Inert BOT row shown in SINGLE mode — keeps the column card the same
+   height as a PAIR card so toggling never reflows the modal. The center
+   button stays live as a shortcut into PAIR mode. */
+.widgets-row.placeholder { border-style: dashed; opacity: 0.7; }
+.widgets-row.placeholder .widgets-cycle { font-weight: 600; letter-spacing: 1px; }
 .widgets-row .widgets-pos {
   color: var(--dim);
   font-variant-numeric: tabular-nums;
@@ -1286,6 +1291,131 @@
   color: var(--fg-bright);
   border-color: var(--accent-3);
 }
+
+/* ── Kiosk settings forms (network targets, container watch list) ──
+   Shared form chrome for the editable settings sub-modals. Touch-sized
+   inputs and steppers matching the kiosk's terminal aesthetic. */
+.kform {
+  display: flex; flex-direction: column;
+  gap: 8px; width: 100%;
+  max-width: 420px; margin: 0 auto;
+}
+.kform-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--dim-2);
+  border-radius: 3px;
+  padding: 6px 10px;
+}
+.kform-label {
+  color: var(--dim); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  flex: 0 0 auto;
+}
+.kform-input {
+  background: var(--panel);
+  color: var(--fg-bright);
+  border: 1px solid var(--dim-2);
+  border-radius: 2px;
+  padding: 6px 8px;
+  font-family: inherit; font-size: 13px;
+  letter-spacing: 0.5px;
+  flex: 1 1 auto; min-width: 0;
+  text-align: right;
+}
+.kform-input:focus { outline: none; border-color: var(--accent); }
+.kform-stepper { display: flex; align-items: center; gap: 8px; }
+.kform-step {
+  background: var(--panel);
+  color: var(--fg-bright);
+  border: 1px solid var(--dim-2);
+  border-radius: 2px;
+  width: 30px; height: 28px;
+  font-family: inherit; font-size: 16px; font-weight: 700;
+  cursor: pointer; touch-action: manipulation;
+  user-select: none; -webkit-user-select: none;
+}
+.kform-step:active { transform: scale(0.92); background: var(--accent-3); }
+.kform-stepval {
+  color: var(--fg-bright); font-variant-numeric: tabular-nums;
+  font-size: 14px; font-weight: 700; min-width: 42px; text-align: center;
+}
+.kform-sub {
+  color: var(--accent); font-size: 10px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  margin-top: 4px;
+}
+.ctr-edit-list {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 32vh; overflow-y: auto;
+}
+.ctr-edit-empty {
+  color: var(--dim); font-size: 11px; font-style: italic;
+  text-align: center; padding: 8px 0;
+}
+.ctr-edit-row {
+  display: grid;
+  grid-template-columns: 1fr auto 28px;
+  gap: 8px; align-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--dim-2);
+  border-radius: 3px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.ctr-edit-name {
+  color: var(--fg); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.ctr-edit-host {
+  color: var(--dim); font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ctr-edit-del {
+  background: var(--panel);
+  color: var(--crit);
+  border: 1px solid var(--dim-2);
+  border-radius: 2px;
+  width: 26px; height: 24px;
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  cursor: pointer; touch-action: manipulation;
+}
+.ctr-edit-del:active { transform: scale(0.92); border-color: var(--crit); }
+.kform-addrow { display: flex; gap: 6px; align-items: stretch; }
+.kform-addrow .ctr-add-name { flex: 0 0 34%; text-align: left; }
+.kform-addrow .ctr-add-host { flex: 1 1 auto; text-align: left; }
+.kform-add {
+  background: var(--panel);
+  color: var(--good);
+  border: 1px solid var(--dim-2);
+  border-radius: 2px;
+  width: 36px; flex: 0 0 auto;
+  font-family: inherit; font-size: 18px; font-weight: 700;
+  cursor: pointer; touch-action: manipulation;
+}
+.kform-add:active { transform: scale(0.92); border-color: var(--good); }
+.kform-msg {
+  font-size: 11px; min-height: 14px;
+  letter-spacing: 0.5px; text-align: center;
+}
+.kform-msg.err { color: var(--crit); }
+.kform-msg.ok  { color: var(--good); }
+.kform-save {
+  align-self: stretch;
+  background: var(--accent);
+  color: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 9px 10px;
+  font-family: inherit;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  cursor: pointer; touch-action: manipulation;
+  user-select: none; -webkit-user-select: none;
+  margin-top: 2px;
+}
+.kform-save:active { transform: scale(0.98); }
 
 /* ── Columns picker (default layout) ──────────────────────────────
    Stacked cards, one per column. Each card has a header with the

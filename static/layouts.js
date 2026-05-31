@@ -1225,12 +1225,13 @@ const LAYOUT_WIDGETS = {
         { id: "disk", label: "DISK", selector: '[data-widget="disk"]' },
         { id: "net",  label: "NET",  selector: '[data-widget="net"]'  },
         { id: "proc", label: "PROC", selector: '[data-widget="proc"]' },
+        { id: "containers", label: "CONTAINERS", selector: '[data-widget="containers"]', autohide: true },
       ],
       defaultColumns: [
-        { top: "cpu",  bottom: "gpu"  },
-        { top: "mem",  bottom: null   },
-        { top: "disk", bottom: "net"  },
-        { top: "proc", bottom: null   },
+        { top: "cpu",  bottom: "gpu"        },
+        { top: "mem",  bottom: null         },
+        { top: "disk", bottom: "net"        },
+        { top: "proc", bottom: "containers" },
       ],
     },
   },
@@ -1441,12 +1442,19 @@ function _wResolveColumns(cspec, stored) {
 function _wIsWidgetAvailable(widget) {
   if (!widget) return false;
   if (!widget.autohide) return true;
-  // Autohide widgets (currently GPU) hide their own DOM via the
+  // Autohide widgets (GPU, CONTAINERS) hide their own DOM via the
   // `hidden` attribute when the metrics feed reports no data. A
   // configured autohide widget that has no data should not occupy a
   // column slot — the column collapses to the other half (or hides
   // entirely if both halves are unavailable).
-  const el = document.querySelector(widget.selector);
+  //
+  // Read .hidden off the *retained* element reference, NOT a fresh
+  // document query: _wApplyColumns detaches every widget element from
+  // the DOM before this check runs, so document.querySelector would
+  // return null for a perfectly available widget and it would be
+  // dropped every time — the bug that made GPU vanish whenever it
+  // shared (or owned) a column. The detached node keeps its .hidden.
+  const el = widget.el || document.querySelector(widget.selector);
   return !!(el && !el.hidden);
 }
 
@@ -1578,6 +1586,34 @@ function applyWidgetConfig(layout) {
   resolved.groups.forEach(_wApplyGroup);
 }
 window.__kioskApplyWidgets = applyWidgetConfig;
+
+// ── Autohide-aware column re-apply ────────────────────────────────
+// The column model (default layout) decides at apply-time whether an
+// autohide widget (GPU, CONTAINERS) is available — it reads the
+// widget element's `hidden` attribute, which the per-tick renderers
+// flip as data arrives or dries up. But the very first apply happens
+// before any /api/stats response, so every autohide widget looks
+// unavailable and gets parked with `widget-hidden`; nothing re-ran
+// the apply when its data later showed up, so e.g. a GPU paired in a
+// column never reappeared. This watcher recomputes a tiny
+// availability signature each tick and re-applies the default columns
+// only when it actually changes — cheap, and it lets autohide widgets
+// (re)claim their column slot the moment their data starts/stops.
+let _wLastAvailSig = null;
+function _wReapplyColumnsIfAvailabilityChanged() {
+  const spec = LAYOUT_WIDGETS.default && LAYOUT_WIDGETS.default.columnSpec;
+  if (!spec) return;
+  let sig = "";
+  for (const w of spec.widgets) {
+    if (!w.autohide) { sig += "1"; continue; }
+    const el = document.querySelector(w.selector);
+    sig += (el && !el.hidden) ? "1" : "0";
+  }
+  if (sig === _wLastAvailSig) return;
+  _wLastAvailSig = sig;
+  applyWidgetConfig("default");
+}
+window.__kioskReapplyColumns = _wReapplyColumnsIfAvailabilityChanged;
 
 function _wCurrentLayoutName() {
   const a = document.documentElement.getAttribute("data-layout");
@@ -1933,14 +1969,29 @@ function _renderColumnsModal(root, layout, resolved) {
 
     card.appendChild(head);
 
-    const makePickerRow = (label, posKey) => {
+    // `placeholder:true` renders an inert BOT row that occupies the same
+    // vertical space as a live picker. Keeping the card's footprint
+    // identical in SINGLE and PAIR mode means toggling the mode never
+    // reflows the modal — so the next tap can't bleed through to a row
+    // that shifted under the finger (the pair/single collapse bug).
+    const makePickerRow = (label, posKey, placeholder) => {
       const row = document.createElement("div");
       row.className = "widgets-row widgets-col-row";
-      const isDup = _wColumnsIsDup(resolved.columns, idx, posKey);
-      if (isDup) row.classList.add("dup");
       const tag = document.createElement("span");
       tag.className = "widgets-pos";
       tag.textContent = label;
+      if (placeholder) {
+        row.classList.add("placeholder");
+        const prev = mkBtn("widgets-move", "◀", () => {}, { disabled: true });
+        const cycle = mkBtn("widgets-cycle", "— tap PAIR",
+          () => { _wColumnsSetMode(resolved, idx, "pair"); persist(); },
+          { title: "Add a second stacked widget to this column" });
+        const next = mkBtn("widgets-move", "▶", () => {}, { disabled: true });
+        row.append(tag, prev, cycle, next);
+        return row;
+      }
+      const isDup = _wColumnsIsDup(resolved.columns, idx, posKey);
+      if (isDup) row.classList.add("dup");
       const prev = mkBtn("widgets-move", "◀",
         () => { _wColumnsCycleSlot(resolved, idx, posKey, -1); persist(); },
         { title: "Previous widget" });
@@ -1960,8 +2011,10 @@ function _renderColumnsModal(root, layout, resolved) {
       return row;
     };
 
-    card.appendChild(makePickerRow("TOP", "top"));
-    if (isPair) card.appendChild(makePickerRow("BOT", "bottom"));
+    card.appendChild(makePickerRow("TOP", "top", false));
+    // Always render a BOT row so the card height is stable across the
+    // SINGLE↔PAIR toggle; in SINGLE mode it's an inert placeholder.
+    card.appendChild(makePickerRow("BOT", "bottom", !isPair));
 
     root.appendChild(card);
   });
@@ -2176,7 +2229,7 @@ function _widgetsRowClick(selector) {
 function _routeModalKey(e) {
   // Identify which modal is on top. The check order matches the
   // back-navigation chain so sub-modals win over the settings modal.
-  const order = ["widgets-modal", "graph-modal", "theme-modal", "layouts-modal", "settings-modal"];
+  const order = ["widgets-modal", "graph-modal", "network-modal", "containers-modal", "theme-modal", "layouts-modal", "settings-modal"];
   let active = null;
   for (const id of order) {
     const el = document.getElementById(id);

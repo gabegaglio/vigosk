@@ -492,6 +492,74 @@ function renderProcs(s) {
   }
 }
 
+// ── Container health rendering ─────────────────────────────────────
+// The widget autohides (sets [hidden]) when nothing is configured, so
+// the column applier collapses its slot — existing layouts are
+// unchanged until the user adds container targets in Kiosk Settings.
+// Rows are reused (no innerHTML churn): each shows a status dot, name,
+// host, and the last RTT. up=green, down=red, pending(null)=neutral.
+function ensureContainerRows(n) {
+  const root = document.getElementById("containers-list");
+  if (!root) return null;
+  while (root.children.length < n) {
+    const row = document.createElement("div");
+    row.className = "ctr-row";
+    const dot  = document.createElement("span"); dot.className  = "ctr-dot";
+    const nm   = document.createElement("span"); nm.className   = "ctr-name";
+    const host = document.createElement("span"); host.className = "ctr-host";
+    const ms   = document.createElement("span"); ms.className   = "ctr-ms";
+    row.append(dot, nm, host, ms);
+    root.appendChild(row);
+  }
+  while (root.children.length > n) root.removeChild(root.lastChild);
+  return root;
+}
+
+function renderContainers(c) {
+  const half = document.getElementById("containers-half");
+  if (!half) return;
+  const list = (c && Array.isArray(c.list)) ? c.list : [];
+  // Autohide when no targets are configured.
+  if (list.length === 0) {
+    if (!half.hidden) half.hidden = true;
+    return;
+  }
+  if (half.hidden) half.hidden = false;
+
+  let up = 0, down = 0;
+  for (const it of list) {
+    if (it.up === true) up++;
+    else if (it.up === false) down++;
+  }
+  const metaEl = document.getElementById("containers-meta");
+  const metaTxt = down > 0 ? `${up} up · ${down} down` : `${up} up`;
+  setText(metaEl, metaTxt);
+  setStyle(metaEl, "color", down > 0 ? "var(--crit)" : "var(--good)");
+
+  const root = ensureContainerRows(list.length);
+  if (!root) return;
+  for (let i = 0; i < list.length; i++) {
+    const it = list[i];
+    const row = root.children[i];
+    // state: up | down | pending
+    const state = it.up === true ? "up" : (it.up === false ? "down" : "pending");
+    if (row.dataset.state !== state) {
+      row.dataset.state = state;
+      row.className = "ctr-row ctr-" + state;
+    }
+    if (row.children[1].textContent !== it.name) {
+      row.children[1].textContent = it.name;
+      row.children[1].title = it.name;
+    }
+    setText(row.children[2], it.host || "");
+    let ms;
+    if (it.up === true) ms = (it.ms != null ? it.ms.toFixed(1) + " ms" : "up");
+    else if (it.up === false) ms = "down";
+    else ms = "—";
+    setText(row.children[3], ms);
+  }
+}
+
 // ── Refresh loop ───────────────────────────────────────────────────
 let coresBuilt = false;
 let lastClockSec = -1;
@@ -732,6 +800,9 @@ async function refresh() {
     // at the top of refresh so the modulo check counts every tick). ──
     if (frame % PROC_EVERY === 0) renderProcs(s);
 
+    // ── Container health ──
+    renderContainers(s.containers);
+
     // ── Alternate layouts (gauges, …) — hand off the same smoothed
     // values rendered above so dial numbers match the default panels. ──
     if (typeof window.layoutOnTick === "function") {
@@ -741,6 +812,13 @@ async function refresh() {
         memPct:  memSm.pct,
         diskPct: memSm.disk,
       });
+    }
+
+    // After every widget's `hidden` state is up to date for this tick,
+    // let the column layout re-claim any autohide widget (GPU,
+    // containers) whose availability just changed.
+    if (typeof window.__kioskReapplyColumns === "function") {
+      window.__kioskReapplyColumns();
     }
   } catch (e) {
     showErr("refresh: " + (e && e.message ? e.message : e));
@@ -969,6 +1047,226 @@ _wireBackBtn("widgets-modal", () => {
   if (typeof window.__kioskCloseWidgets === "function") window.__kioskCloseWidgets();
 });
 
+// ══════════════════════════════════════════════════════════════════
+// Runtime config: ping targets + container watch list
+// ──────────────────────────────────────────────────────────────────
+// These live server-side (the pings happen in metrics.py) but are
+// edited here. We cache the last-known config, POST edits to
+// /api/config, and reconcile from the sanitized config the server
+// echoes back (it may drop an invalid host the user typed).
+// ══════════════════════════════════════════════════════════════════
+let _kioskConfig = {
+  ping: { gw: "", ext: "1.1.1.1" },
+  containers: { interval_s: 5, max_per_cycle: 8, targets: [] },
+};
+// Working copy for the containers editor (committed on SAVE).
+let _ctrDraft = { interval_s: 5, max_per_cycle: 8, targets: [] };
+
+// Client-side host check — mirrors the server's _valid_host so we can
+// flag bad input before the round-trip. IPv4 or DNS-style hostname.
+function _validHost(s) {
+  s = (s || "").trim();
+  if (!s || s.length > 253) return false;
+  if (/[\s;|&$`'"\\<>]/.test(s)) return false;
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(s)) {
+    return s.split(".").every((o) => +o >= 0 && +o <= 255);
+  }
+  return /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$/.test(s);
+}
+
+function _modalShow(id) {
+  const m = document.getElementById(id);
+  if (m) m.classList.add("show");
+}
+function _modalHide(id) {
+  const m = document.getElementById(id);
+  if (m) m.classList.remove("show");
+}
+
+function _applyConfig(cfg) {
+  if (!cfg || typeof cfg !== "object") return;
+  if (cfg.ping) _kioskConfig.ping = { gw: cfg.ping.gw || "", ext: cfg.ping.ext || "1.1.1.1" };
+  if (cfg.containers) {
+    _kioskConfig.containers = {
+      interval_s: cfg.containers.interval_s || 5,
+      max_per_cycle: cfg.containers.max_per_cycle || 8,
+      targets: Array.isArray(cfg.containers.targets) ? cfg.containers.targets : [],
+    };
+  }
+}
+
+async function loadKioskConfig() {
+  try {
+    const r = await fetch("api/config", { cache: "no-store" });
+    _applyConfig(await r.json());
+  } catch (e) { /* keep defaults; server may be mid-start */ }
+}
+
+async function saveKioskConfig(patch) {
+  const body = {
+    ping: { ..._kioskConfig.ping, ...(patch.ping || {}) },
+    containers: { ..._kioskConfig.containers, ...(patch.containers || {}) },
+  };
+  const r = await fetch("api/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  _applyConfig(await r.json());
+  return _kioskConfig;
+}
+
+// ── Network ping-targets modal ─────────────────────────────────────
+function openNetworkModal() {
+  document.getElementById("net-gw-input").value  = _kioskConfig.ping.gw || "";
+  document.getElementById("net-ext-input").value = _kioskConfig.ping.ext || "";
+  const msg = document.getElementById("net-msg");
+  if (msg) { msg.textContent = ""; msg.className = "kform-msg"; }
+  _modalShow("network-modal");
+}
+function closeNetworkModal() { _modalHide("network-modal"); }
+
+(function _wireNetworkModal() {
+  const save = document.getElementById("net-save");
+  if (!save) return;
+  const onSave = async (e) => {
+    e.stopPropagation(); e.preventDefault();
+    const gw  = document.getElementById("net-gw-input").value.trim();
+    const ext = document.getElementById("net-ext-input").value.trim();
+    const msg = document.getElementById("net-msg");
+    if (gw && !_validHost(gw)) { _formMsg(msg, "Invalid gateway host", true); return; }
+    if (!_validHost(ext))      { _formMsg(msg, "Invalid external host", true); return; }
+    try {
+      await saveKioskConfig({ ping: { gw, ext } });
+      _formMsg(msg, "Saved ✓", false);
+    } catch (err) { _formMsg(msg, "Save failed", true); }
+  };
+  save.addEventListener("click", onSave);
+  save.addEventListener("pointerdown", (e) => e.stopPropagation());
+  save.addEventListener("pointerup",   (e) => e.stopPropagation());
+  const nm = document.getElementById("network-modal");
+  if (nm) {
+    nm.addEventListener("click", (e) => { if (e.target === nm) closeNetworkModal(); });
+    nm.addEventListener("pointerdown", (e) => e.stopPropagation());
+    nm.addEventListener("pointerup",   (e) => e.stopPropagation());
+  }
+})();
+
+function _formMsg(el, text, isErr) {
+  if (!el) return;
+  el.textContent = text;
+  el.className = "kform-msg" + (isErr ? " err" : " ok");
+}
+
+// ── Container health modal ─────────────────────────────────────────
+const CTR_IV_MIN = 1, CTR_IV_MAX = 600, CTR_CAP_MIN = 1, CTR_CAP_MAX = 64;
+
+function _ctrSyncSteppers() {
+  setText(document.getElementById("ctr-iv-val"), Math.round(_ctrDraft.interval_s) + "s");
+  setText(document.getElementById("ctr-cap-val"), String(_ctrDraft.max_per_cycle));
+}
+function _ctrRenderList() {
+  const root = document.getElementById("ctr-edit-list");
+  if (!root) return;
+  root.innerHTML = "";
+  if (_ctrDraft.targets.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "ctr-edit-empty";
+    empty.textContent = "no containers — add one below";
+    root.appendChild(empty);
+    return;
+  }
+  _ctrDraft.targets.forEach((t, i) => {
+    const row = document.createElement("div");
+    row.className = "ctr-edit-row";
+    const nm = document.createElement("span");
+    nm.className = "ctr-edit-name"; nm.textContent = t.name || t.host;
+    const host = document.createElement("span");
+    host.className = "ctr-edit-host"; host.textContent = t.host;
+    const del = document.createElement("button");
+    del.className = "ctr-edit-del"; del.textContent = "✕";
+    del.setAttribute("aria-label", "Remove " + (t.name || t.host));
+    del.addEventListener("click", (e) => {
+      e.stopPropagation();
+      _ctrDraft.targets.splice(i, 1);
+      _ctrRenderList();
+    });
+    del.addEventListener("pointerdown", (e) => e.stopPropagation());
+    del.addEventListener("pointerup",   (e) => e.stopPropagation());
+    row.append(nm, host, del);
+    root.appendChild(row);
+  });
+}
+function openContainersModal() {
+  // Deep-copy the live config into the editor draft.
+  _ctrDraft = {
+    interval_s: _kioskConfig.containers.interval_s || 5,
+    max_per_cycle: _kioskConfig.containers.max_per_cycle || 8,
+    targets: (_kioskConfig.containers.targets || []).map((t) => ({ name: t.name, host: t.host })),
+  };
+  const msg = document.getElementById("ctr-msg");
+  if (msg) { msg.textContent = ""; msg.className = "kform-msg"; }
+  document.getElementById("ctr-add-name").value = "";
+  document.getElementById("ctr-add-host").value = "";
+  _ctrSyncSteppers();
+  _ctrRenderList();
+  _modalShow("containers-modal");
+}
+function closeContainersModal() { _modalHide("containers-modal"); }
+
+(function _wireContainersModal() {
+  const wire = (id, fn) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("click", (e) => { e.stopPropagation(); e.preventDefault(); fn(); });
+    el.addEventListener("pointerdown", (e) => e.stopPropagation());
+    el.addEventListener("pointerup",   (e) => e.stopPropagation());
+  };
+  const clampIv  = (v) => Math.max(CTR_IV_MIN, Math.min(CTR_IV_MAX, v));
+  const clampCap = (v) => Math.max(CTR_CAP_MIN, Math.min(CTR_CAP_MAX, v));
+  wire("ctr-iv-down",  () => { _ctrDraft.interval_s = clampIv(_ctrDraft.interval_s - 1); _ctrSyncSteppers(); });
+  wire("ctr-iv-up",    () => { _ctrDraft.interval_s = clampIv(_ctrDraft.interval_s + 1); _ctrSyncSteppers(); });
+  wire("ctr-cap-down", () => { _ctrDraft.max_per_cycle = clampCap(_ctrDraft.max_per_cycle - 1); _ctrSyncSteppers(); });
+  wire("ctr-cap-up",   () => { _ctrDraft.max_per_cycle = clampCap(_ctrDraft.max_per_cycle + 1); _ctrSyncSteppers(); });
+  wire("ctr-add-btn",  () => {
+    const nameEl = document.getElementById("ctr-add-name");
+    const hostEl = document.getElementById("ctr-add-host");
+    const host = hostEl.value.trim();
+    const name = nameEl.value.trim().slice(0, 32) || host;
+    const msg = document.getElementById("ctr-msg");
+    if (!_validHost(host)) { _formMsg(msg, "Invalid host / IP", true); return; }
+    if (_ctrDraft.targets.some((t) => t.host === host)) { _formMsg(msg, "Host already listed", true); return; }
+    if (_ctrDraft.targets.length >= 128) { _formMsg(msg, "Too many containers", true); return; }
+    _ctrDraft.targets.push({ name, host });
+    nameEl.value = ""; hostEl.value = "";
+    if (msg) { msg.textContent = ""; msg.className = "kform-msg"; }
+    _ctrRenderList();
+  });
+  wire("ctr-save", async () => {
+    const msg = document.getElementById("ctr-msg");
+    try {
+      await saveKioskConfig({ containers: {
+        interval_s: _ctrDraft.interval_s,
+        max_per_cycle: _ctrDraft.max_per_cycle,
+        targets: _ctrDraft.targets,
+      } });
+      _formMsg(msg, "Saved ✓", false);
+    } catch (err) { _formMsg(msg, "Save failed", true); }
+  });
+  const cm = document.getElementById("containers-modal");
+  if (cm) {
+    cm.addEventListener("click", (e) => { if (e.target === cm) closeContainersModal(); });
+    cm.addEventListener("pointerdown", (e) => e.stopPropagation());
+    cm.addEventListener("pointerup",   (e) => e.stopPropagation());
+  }
+})();
+
+_wireSettingsBtn("settings-network-btn",    openNetworkModal);
+_wireSettingsBtn("settings-containers-btn", openContainersModal);
+_wireBackBtn("network-modal",    closeNetworkModal);
+_wireBackBtn("containers-modal", closeContainersModal);
+
+loadKioskConfig();
 armRefresh();
 refresh();
 
@@ -1125,6 +1423,8 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     closeThemeModal();
     closeGraphModal();
+    closeNetworkModal();
+    closeContainersModal();
     closeSettingsModal();
   }
 });

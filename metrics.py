@@ -61,6 +61,161 @@ GPU_HISTORY   = 60        # ring length for the busy-% sparkline
 DISK_FSTYPES  = ("ext4", "ext3", "ext2", "xfs", "btrfs", "zfs", "vfat", "ntfs")
 DISK_REFRESH  = 50        # re-enumerate disks every Nth fast tick (~5 s)
 
+# ── Container health pinger ──────────────────────────────────────────
+# The kiosk can monitor a user-supplied list of container/host targets,
+# reporting up/down by ICMP ping. Interval and a per-cycle cap (so the
+# host isn't flooded sending pings) are both configurable from the
+# Kiosk Settings UI; when the target count exceeds the cap the loop
+# staggers the pings across successive cycles instead of firing them
+# all at once.
+CONTAINER_DEFAULT_INTERVAL = 5.0   # seconds between ping cycles
+CONTAINER_DEFAULT_CAP      = 8     # max containers pinged per cycle
+CONTAINER_MIN_INTERVAL     = 1.0
+CONTAINER_MAX_INTERVAL     = 600.0
+CONTAINER_CAP_MIN          = 1
+CONTAINER_CAP_MAX          = 64
+CONTAINER_MAX_TARGETS      = 128   # hard ceiling on configured targets
+
+# ── Runtime config (editable from the kiosk UI, persisted to disk) ────
+# Settings the user can change at runtime without restarting the server:
+# the gateway + external ping targets and the container watch list. The
+# file lives next to metrics.py when that's writable, else under the
+# user's config dir. Sampler loops re-read this every cycle so a POST to
+# /api/config takes effect immediately.
+def _config_path() -> Path:
+    env = os.environ.get("VIGOSK_CONFIG", "").strip()
+    if env:
+        return Path(env)
+    # Prefer alongside metrics.py (matches the source==deploy layout);
+    # fall back to ~/.config/vigosk when ROOT isn't writable.
+    candidate = ROOT / "vigosk-config.json"
+    try:
+        if os.access(ROOT, os.W_OK):
+            return candidate
+    except Exception:
+        pass
+    base = os.environ.get("XDG_CONFIG_HOME", "").strip() or os.path.expanduser("~/.config")
+    return Path(base) / "vigosk" / "config.json"
+
+CONFIG_PATH = _config_path()
+
+# Hostname / IPv4 validation: an octet-dotted IPv4 or a DNS-style name.
+# Keeps the loops from shelling out `ping` with junk and gives the UI a
+# server-side check beyond the client's basic format guard.
+_HOSTNAME_RE = re.compile(
+    r"^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$"
+)
+
+
+def _valid_host(s: str) -> bool:
+    s = (s or "").strip()
+    if not s or len(s) > 253:
+        return False
+    # Reject obvious shell/argument injection; ping only needs host chars.
+    if any(c in s for c in " \t\n\r;|&$`'\"\\<>"):
+        return False
+    try:
+        socket.inet_aton(s)  # dotted IPv4 fast-path
+        return True
+    except OSError:
+        pass
+    return bool(_HOSTNAME_RE.match(s))
+
+
+_DEFAULT_CONFIG = {
+    "ping": {
+        # Empty gw ⇒ auto-detect the default gateway (preserves the
+        # original behavior); a literal host overrides it. ext defaults
+        # to the env/compiled-in external target.
+        "gw":  "",
+        "ext": PING_EXT_TARGET,
+    },
+    "containers": {
+        "interval_s":    CONTAINER_DEFAULT_INTERVAL,
+        "max_per_cycle": CONTAINER_DEFAULT_CAP,
+        "targets":       [],   # list of {"name": str, "host": str}
+    },
+}
+
+_CONFIG_LOCK = threading.Lock()
+_CONFIG: dict = json.loads(json.dumps(_DEFAULT_CONFIG))  # deep copy
+
+
+def _sanitize_config(raw: dict) -> dict:
+    """Coerce an arbitrary parsed payload into a valid config dict.
+
+    Unknown keys are dropped, out-of-range numbers clamped, and invalid
+    hosts skipped — so a malformed POST can never wedge the samplers.
+    """
+    cfg = json.loads(json.dumps(_DEFAULT_CONFIG))  # fresh defaults
+    if not isinstance(raw, dict):
+        return cfg
+    ping = raw.get("ping")
+    if isinstance(ping, dict):
+        gw = str(ping.get("gw", "")).strip()
+        cfg["ping"]["gw"] = gw if (gw == "" or _valid_host(gw)) else ""
+        ext = str(ping.get("ext", "")).strip()
+        if _valid_host(ext):
+            cfg["ping"]["ext"] = ext
+    cont = raw.get("containers")
+    if isinstance(cont, dict):
+        try:
+            iv = float(cont.get("interval_s", CONTAINER_DEFAULT_INTERVAL))
+        except (TypeError, ValueError):
+            iv = CONTAINER_DEFAULT_INTERVAL
+        cfg["containers"]["interval_s"] = max(
+            CONTAINER_MIN_INTERVAL, min(CONTAINER_MAX_INTERVAL, iv))
+        try:
+            cap = int(cont.get("max_per_cycle", CONTAINER_DEFAULT_CAP))
+        except (TypeError, ValueError):
+            cap = CONTAINER_DEFAULT_CAP
+        cfg["containers"]["max_per_cycle"] = max(
+            CONTAINER_CAP_MIN, min(CONTAINER_CAP_MAX, cap))
+        targets = cont.get("targets")
+        clean: list[dict] = []
+        seen: set[str] = set()
+        if isinstance(targets, list):
+            for t in targets:
+                if not isinstance(t, dict):
+                    continue
+                host = str(t.get("host", "")).strip()
+                if not _valid_host(host) or host in seen:
+                    continue
+                name = str(t.get("name", "")).strip()[:32] or host
+                seen.add(host)
+                clean.append({"name": name, "host": host})
+                if len(clean) >= CONTAINER_MAX_TARGETS:
+                    break
+        cfg["containers"]["targets"] = clean
+    return cfg
+
+
+def _load_config() -> None:
+    global _CONFIG
+    try:
+        raw = json.loads(CONFIG_PATH.read_text())
+        with _CONFIG_LOCK:
+            _CONFIG = _sanitize_config(raw)
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print(f"[config] load failed: {e}", flush=True)
+
+
+def _save_config(cfg: dict) -> None:
+    try:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CONFIG_PATH.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(cfg, indent=2))
+        tmp.replace(CONFIG_PATH)
+    except Exception as e:
+        print(f"[config] save failed: {e}", flush=True)
+
+
+def _get_config() -> dict:
+    with _CONFIG_LOCK:
+        return json.loads(json.dumps(_CONFIG))
+
 # ── WAN/LAN classification ───────────────────────────────────────────
 # Interfaces we never count as LAN even when up. Loopback, container /
 # bridge backplane, tunnels, VPNs, and common virtual-network kernel ifs.
@@ -166,11 +321,19 @@ def _ping_once(ip: str) -> float | None:
 
 
 def _ping_loop() -> None:
-    """Probe gateway + external target every PING_PERIOD; push into the rings."""
+    """Probe gateway + external target every PING_PERIOD; push into the rings.
+
+    Targets come from the runtime config (re-read each cycle), so editing
+    them in Kiosk Settings takes effect without a restart. An empty gw
+    config means auto-detect the default gateway — the original behavior.
+    """
     while True:
         try:
-            gw_ip = _gateway_ipv4()
-            for slot, ip in (("gw", gw_ip), ("ext", PING_EXT_TARGET)):
+            cfg_ping = _get_config().get("ping", {})
+            gw_cfg = (cfg_ping.get("gw") or "").strip()
+            gw_ip = gw_cfg if gw_cfg else _gateway_ipv4()
+            ext_ip = (cfg_ping.get("ext") or "").strip() or PING_EXT_TARGET
+            for slot, ip in (("gw", gw_ip), ("ext", ext_ip)):
                 ms = _ping_once(ip) if ip else None
                 spark_v = min(ms if ms is not None else PING_FAIL_VALUE, PING_SCALE_MS)
                 with _LOCK:
@@ -180,6 +343,62 @@ def _ping_loop() -> None:
         except Exception as e:
             print(f"[ping_loop] {e}", flush=True)
         time.sleep(PING_PERIOD)
+
+
+def _container_loop() -> None:
+    """Ping the configured container targets, reporting up/down per host.
+
+    Respects the per-cycle cap: at most `max_per_cycle` hosts are pinged
+    each cycle. When the watch list is longer than the cap the start
+    offset advances each cycle so the pings are staggered across cycles
+    rather than fired all at once — keeping the host from being flooded.
+    State for hosts that drop out of the config is pruned; hosts not yet
+    reached in the current sweep keep their last known (or unknown) state.
+    """
+    offset = 0
+    while True:
+        interval = CONTAINER_DEFAULT_INTERVAL
+        try:
+            cont = _get_config().get("containers", {})
+            targets = cont.get("targets", []) or []
+            interval = float(cont.get("interval_s", CONTAINER_DEFAULT_INTERVAL))
+            cap = int(cont.get("max_per_cycle", CONTAINER_DEFAULT_CAP))
+            cap = max(CONTAINER_CAP_MIN, cap)
+
+            wanted = {t["host"] for t in targets}
+            with _LOCK:
+                for host in list(_CONTAINER_STATE.keys()):
+                    if host not in wanted:
+                        _CONTAINER_STATE.pop(host, None)
+                for t in targets:
+                    st = _CONTAINER_STATE.get(t["host"])
+                    if st is None:
+                        _CONTAINER_STATE[t["host"]] = {
+                            "name": t["name"], "host": t["host"],
+                            "up": None, "ms": None, "ts": 0.0,
+                        }
+                    else:
+                        st["name"] = t["name"]  # keep label in sync
+
+            n = len(targets)
+            if n:
+                if offset >= n:
+                    offset = 0
+                batch = [targets[(offset + i) % n] for i in range(min(cap, n))]
+                offset = (offset + len(batch)) % n
+                for t in batch:
+                    ms = _ping_once(t["host"])
+                    with _LOCK:
+                        st = _CONTAINER_STATE.get(t["host"])
+                        if st is not None:
+                            st["up"] = ms is not None
+                            st["ms"] = ms
+                            st["ts"] = time.time()
+            else:
+                offset = 0
+        except Exception as e:
+            print(f"[container_loop] {e}", flush=True)
+        time.sleep(max(CONTAINER_MIN_INTERVAL, interval))
 
 
 def _gpu_model() -> str | None:
@@ -441,6 +660,9 @@ _GPU_STATE: dict = {
                             # instead of duplicating the CPU package temp.
 }
 _DISK_LIST: list[dict] = []  # populated by fast loop, list of {label, total, used, percent, kind}
+# Container watch state: host -> {name, host, up(bool|None), ms, ts}. None
+# `up` means "not yet probed this run" (rendered neutral/pending by the UI).
+_CONTAINER_STATE: dict[str, dict] = {}
 
 
 def _clean_cpu_name(raw: str) -> str:
@@ -742,13 +964,29 @@ def snapshot() -> dict:
             "temp_c": _GPU_STATE["temp_c"],   # None ⇒ no dedicated sensor
         }
         disks = list(_DISK_LIST)
+    cont_cfg = _get_config().get("containers", {})
+    with _LOCK:
+        # Emit in configured order so the UI list is stable; fall back to
+        # whatever state exists for hosts mid-prune.
+        order = [t["host"] for t in cont_cfg.get("targets", [])]
+        cont_list = []
+        for host in order:
+            st = _CONTAINER_STATE.get(host)
+            if st is not None:
+                cont_list.append(dict(st))
+    containers = {
+        "interval_s":    cont_cfg.get("interval_s", CONTAINER_DEFAULT_INTERVAL),
+        "max_per_cycle": cont_cfg.get("max_per_cycle", CONTAINER_DEFAULT_CAP),
+        "list":          cont_list,
+    }
     if fast is None:
-        return {"loading": True}
+        return {"loading": True, "containers": containers}
     out = dict(fast)
     out["procs_top"] = procs
     out["net"] = {**out["net"], "ping": ping}
     out["gpu"] = gpu
     out["disks"] = disks
+    out["containers"] = containers
     return out
 
 
@@ -781,6 +1019,9 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if path == "/api/config":
+            self._send_json(200, _get_config())
+            return
         static = STATIC_FILES.get(path)
         if static is not None:
             fs_path, ctype = static
@@ -798,12 +1039,47 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_error(404)
 
+    def _send_json(self, code: int, payload: dict):
+        body = json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        path = urlsplit(self.path).path
+        if path != "/api/config":
+            self.send_error(404)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            if length > 64 * 1024:           # guard against oversized bodies
+                self._send_json(413, {"error": "payload too large"})
+                return
+            raw = self.rfile.read(length) if length else b"{}"
+            parsed = json.loads(raw.decode("utf-8") or "{}")
+        except Exception:
+            self._send_json(400, {"error": "invalid JSON"})
+            return
+        global _CONFIG
+        clean = _sanitize_config(parsed)
+        with _CONFIG_LOCK:
+            _CONFIG = clean
+        _save_config(clean)
+        # Echo back the sanitized config so the UI can reconcile (e.g. an
+        # invalid host the user typed was dropped server-side).
+        self._send_json(200, clean)
+
 
 def main():
+    _load_config()
     threading.Thread(target=_fast_loop, name="fast-sampler", daemon=True).start()
     threading.Thread(target=_proc_loop, name="proc-sampler", daemon=True).start()
     threading.Thread(target=_ping_loop, name="ping-sampler", daemon=True).start()
     threading.Thread(target=_gpu_loop,  name="gpu-sampler",  daemon=True).start()
+    threading.Thread(target=_container_loop, name="container-sampler", daemon=True).start()
     host = os.environ.get("VIGOSK_HOST", "127.0.0.1").strip() or "127.0.0.1"
     try:
         port = int(os.environ.get("VIGOSK_PORT", "8765"))

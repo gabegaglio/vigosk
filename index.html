@@ -61,6 +61,14 @@
         <span class="settings-btn-label">WIDGETS</span>
         <span class="settings-btn-value" id="settings-widgets-value">configure</span>
       </button>
+      <button class="settings-btn" id="settings-network-btn">
+        <span class="settings-btn-label">NETWORK</span>
+        <span class="settings-btn-value" id="settings-network-value">ping targets</span>
+      </button>
+      <button class="settings-btn" id="settings-containers-btn">
+        <span class="settings-btn-label">CONTAINERS</span>
+        <span class="settings-btn-value" id="settings-containers-value">configure</span>
+      </button>
       <button class="settings-btn" id="settings-graph-btn">
         <span class="settings-btn-label">LINE MODE</span>
         <span class="settings-btn-value" id="settings-graph-value">—</span>
@@ -81,6 +89,69 @@
     <div class="theme-modal-title">WIDGETS · <span id="widgets-title">—</span></div>
     <div class="widgets-list" id="widgets-list"></div>
     <div class="theme-modal-hint">tap a slot to cycle through widgets · saved per layout</div>
+  </div>
+</div>
+
+<!-- Network ping-targets modal — gateway + external editable hosts. -->
+<div class="theme-modal network-modal" id="network-modal" aria-hidden="true">
+  <div class="theme-modal-box">
+    <button class="modal-back" data-back="network" aria-label="Back to settings">← BACK</button>
+    <div class="theme-modal-title">NETWORK · PING TARGETS</div>
+    <div class="kform">
+      <label class="kform-row">
+        <span class="kform-label">GATEWAY</span>
+        <input class="kform-input" id="net-gw-input" type="text"
+               inputmode="decimal" autocomplete="off" spellcheck="false"
+               placeholder="auto-detect">
+      </label>
+      <label class="kform-row">
+        <span class="kform-label">EXTERNAL</span>
+        <input class="kform-input" id="net-ext-input" type="text"
+               inputmode="decimal" autocomplete="off" spellcheck="false"
+               placeholder="1.1.1.1">
+      </label>
+      <div class="kform-msg" id="net-msg"></div>
+      <button class="kform-save" id="net-save">SAVE</button>
+    </div>
+    <div class="theme-modal-hint">blank gateway = auto-detect · IP or hostname</div>
+  </div>
+</div>
+
+<!-- Container health config modal — interval, per-cycle cap, watch list. -->
+<div class="theme-modal containers-modal" id="containers-modal" aria-hidden="true">
+  <div class="theme-modal-box">
+    <button class="modal-back" data-back="containers" aria-label="Back to settings">← BACK</button>
+    <div class="theme-modal-title">CONTAINERS · HEALTH</div>
+    <div class="kform">
+      <div class="kform-row">
+        <span class="kform-label">INTERVAL</span>
+        <span class="kform-stepper">
+          <button class="kform-step" id="ctr-iv-down" aria-label="Shorter interval">−</button>
+          <span class="kform-stepval" id="ctr-iv-val">5s</span>
+          <button class="kform-step" id="ctr-iv-up" aria-label="Longer interval">+</button>
+        </span>
+      </div>
+      <div class="kform-row">
+        <span class="kform-label">MAX / CYCLE</span>
+        <span class="kform-stepper">
+          <button class="kform-step" id="ctr-cap-down" aria-label="Fewer per cycle">−</button>
+          <span class="kform-stepval" id="ctr-cap-val">8</span>
+          <button class="kform-step" id="ctr-cap-up" aria-label="More per cycle">+</button>
+        </span>
+      </div>
+      <div class="kform-sub">WATCH LIST</div>
+      <div class="ctr-edit-list" id="ctr-edit-list"></div>
+      <div class="kform-addrow">
+        <input class="kform-input ctr-add-name" id="ctr-add-name" type="text"
+               autocomplete="off" spellcheck="false" placeholder="name">
+        <input class="kform-input ctr-add-host" id="ctr-add-host" type="text"
+               inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="host / IP">
+        <button class="kform-add" id="ctr-add-btn" aria-label="Add container">＋</button>
+      </div>
+      <div class="kform-msg" id="ctr-msg"></div>
+      <button class="kform-save" id="ctr-save">SAVE</button>
+    </div>
+    <div class="theme-modal-hint">staggers pings when list exceeds max/cycle</div>
   </div>
 </div>
 
@@ -280,6 +351,16 @@
       </div>
     </div>
   </section>
+
+  <!-- Container health widget. Autohides until containers are configured
+       in Kiosk Settings; the column applier relocates it on demand. -->
+  <div class="panel-half containers-half" id="containers-half" data-widget="containers" hidden>
+    <div class="title">
+      <span>CONTAINERS</span>
+      <span class="sub" id="containers-meta">—</span>
+    </div>
+    <div class="containers-list" id="containers-list"></div>
+  </div>
 
 </div>
 

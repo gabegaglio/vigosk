@@ -18,6 +18,10 @@ __pycache__/
 # Release build output (CI writes here)
 /dist/
 
+# Runtime UI config (ping targets + container watch list). Host-specific
+# state written by POST /api/config — not source.
+/vigosk-config.json
+
 # Host-specific kiosk monitor on/off helpers — not portable across
 # users (assume specific hardware / xset / vbetool behavior).
 screen-off*
