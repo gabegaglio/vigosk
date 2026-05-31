@@ -1439,6 +1439,25 @@ function _wResolveColumns(cspec, stored) {
     const bottom = entry && validIds.has(entry.bottom) ? entry.bottom : null;
     return { top, bottom };
   });
+  // Self-heal newly-introduced widgets. A widget added to the spec
+  // *after* the user last saved their default-layout columns (e.g.
+  // CONTAINERS) won't appear in any stored column, so it can never
+  // claim a slot and stays invisible forever — even once its data is
+  // flowing. Seed any such widget into its default home slot when that
+  // slot is currently empty, without disturbing the user's other picks.
+  if (src) {
+    const placed = new Set();
+    cols.forEach((c) => { if (c.top) placed.add(c.top); if (c.bottom) placed.add(c.bottom); });
+    defaults.forEach((d, i) => {
+      ["top", "bottom"].forEach((pos) => {
+        const id = d[pos];
+        if (id && validIds.has(id) && !placed.has(id) && !cols[i][pos]) {
+          cols[i][pos] = id;
+          placed.add(id);
+        }
+      });
+    });
+  }
   return cols;
 }
 

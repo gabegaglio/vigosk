@@ -299,7 +299,7 @@
   transition: transform 0.08s ease, border-color 0.15s ease;
 }
 .layout-swatch:active { transform: scale(0.95); }
-.layout-swatch.selected { border-color: var(--accent); box-shadow: 0 0 6px var(--accent-3); }
+.layout-swatch.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .layout-swatch-reset {
   position: absolute; top: 4px; right: 4px;
   width: 18px; height: 18px; line-height: 16px;
@@ -1019,7 +1019,7 @@
 .layout-swatch.focused,
 .graph-swatch.focused {
   border-color: var(--accent) !important;
-  box-shadow: 0 0 0 1px var(--accent), 0 0 10px var(--accent-3);
+  box-shadow: 0 0 0 1px var(--accent);
   outline: none;
 }
 .widgets-row.focused {
@@ -1382,19 +1382,45 @@
   cursor: pointer; touch-action: manipulation;
 }
 .ctr-edit-del:active { transform: scale(0.92); border-color: var(--crit); }
-.kform-addrow { display: flex; gap: 6px; align-items: stretch; }
-.kform-addrow .ctr-add-name { flex: 0 0 34%; text-align: left; }
-.kform-addrow .ctr-add-host { flex: 1 1 auto; text-align: left; }
-.kform-add {
+/* Add-container card — a self-contained panel with labelled NAME and
+   IP/HOST fields stacked over a full-width ADD button, so the entry
+   flow reads top-to-bottom instead of cramming two unlabelled inputs
+   and a tiny ＋ onto one line. */
+.ctr-addcard {
+  display: flex; flex-direction: column; gap: 7px;
+  background: var(--panel-2);
+  border: 1px solid var(--dim-2);
+  border-radius: 4px;
+  padding: 10px;
+  margin-top: 4px;
+}
+.ctr-addcard-title {
+  color: var(--accent); font-size: 11px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+}
+.ctr-field {
+  display: flex; align-items: center; gap: 10px;
+}
+.ctr-field-label {
+  color: var(--dim); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  flex: 0 0 64px;
+}
+.ctr-field .kform-input { text-align: left; }
+.ctr-add-btn {
+  align-self: stretch;
   background: var(--panel);
   color: var(--good);
-  border: 1px solid var(--dim-2);
-  border-radius: 2px;
-  width: 36px; flex: 0 0 auto;
-  font-family: inherit; font-size: 18px; font-weight: 700;
+  border: 1px solid var(--good);
+  border-radius: 3px;
+  padding: 8px 10px;
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
   cursor: pointer; touch-action: manipulation;
+  user-select: none; -webkit-user-select: none;
+  margin-top: 2px;
 }
-.kform-add:active { transform: scale(0.92); border-color: var(--good); }
+.ctr-add-btn:active { transform: scale(0.98); }
 .kform-msg {
   font-size: 11px; min-height: 14px;
   letter-spacing: 0.5px; text-align: center;

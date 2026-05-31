@@ -143,19 +143,26 @@
           <button class="kform-step" id="ctr-cap-up" aria-label="More per cycle">+</button>
         </span>
       </div>
-      <div class="kform-sub">WATCH LIST · NAME + IP / HOSTNAME</div>
+      <div class="kform-sub">WATCH LIST</div>
       <div class="ctr-edit-list" id="ctr-edit-list"></div>
-      <div class="kform-addrow">
-        <input class="kform-input ctr-add-name" id="ctr-add-name" type="text"
-               autocomplete="off" spellcheck="false" placeholder="name">
-        <input class="kform-input ctr-add-host" id="ctr-add-host" type="text"
-               inputmode="url" autocomplete="off" spellcheck="false" placeholder="IP / hostname">
-        <button class="kform-add" id="ctr-add-btn" aria-label="Add container">＋</button>
+      <div class="ctr-addcard">
+        <div class="ctr-addcard-title">＋ ADD CONTAINER</div>
+        <label class="ctr-field">
+          <span class="ctr-field-label">NAME</span>
+          <input class="kform-input ctr-add-name" id="ctr-add-name" type="text"
+                 autocomplete="off" spellcheck="false" placeholder="e.g. plex">
+        </label>
+        <label class="ctr-field">
+          <span class="ctr-field-label">IP / HOST</span>
+          <input class="kform-input ctr-add-host" id="ctr-add-host" type="text"
+                 inputmode="url" autocomplete="off" spellcheck="false" placeholder="e.g. 192.168.1.20">
+        </label>
+        <button class="ctr-add-btn" id="ctr-add-btn">ADD TO LIST</button>
+        <div class="kform-msg" id="ctr-msg"></div>
       </div>
-      <div class="kform-msg" id="ctr-msg"></div>
       <button class="kform-save" id="ctr-save">SAVE</button>
     </div>
-    <div class="theme-modal-hint">name + IP or hostname per container · staggers pings when list exceeds max/cycle</div>
+    <div class="theme-modal-hint">name is optional · press Enter to add · pings stagger when the list exceeds max/cycle</div>
   </div>
 </div>
 

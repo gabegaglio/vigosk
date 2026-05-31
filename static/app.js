@@ -650,10 +650,15 @@ function renderContainers(c) {
       row.children[1].title = it.name;
     }
     setText(row.children[2], it.host || "");
+    // Status text: live RTT when up, an explicit DOWN when the ping
+    // failed, and CNR ("can't reach" — not yet pinged this sweep) while
+    // the result is still pending. Down/unreachable containers stay
+    // listed so the user always sees the full watch list, not just the
+    // hosts that happen to be answering.
     let ms;
-    if (it.up === true) ms = (it.ms != null ? it.ms.toFixed(1) + " ms" : "up");
-    else if (it.up === false) ms = "down";
-    else ms = "—";
+    if (it.up === true) ms = (it.ms != null ? it.ms.toFixed(1) + " ms" : "UP");
+    else if (it.up === false) ms = "DOWN";
+    else ms = "CNR";
     setText(row.children[3], ms);
   }
 }
@@ -1347,19 +1352,31 @@ function closeContainersModal() { _modalHide("containers-modal"); }
   wire("ctr-iv-up",    () => { _ctrDraft.interval_s = clampIv(_ctrDraft.interval_s + 1); _ctrSyncSteppers(); });
   wire("ctr-cap-down", () => { _ctrDraft.max_per_cycle = clampCap(_ctrDraft.max_per_cycle - 1); _ctrSyncSteppers(); });
   wire("ctr-cap-up",   () => { _ctrDraft.max_per_cycle = clampCap(_ctrDraft.max_per_cycle + 1); _ctrSyncSteppers(); });
-  wire("ctr-add-btn",  () => {
+  const ctrAdd = () => {
     const nameEl = document.getElementById("ctr-add-name");
     const hostEl = document.getElementById("ctr-add-host");
     const host = hostEl.value.trim();
     const name = nameEl.value.trim().slice(0, 32) || host;
     const msg = document.getElementById("ctr-msg");
-    if (!_validHost(host)) { _formMsg(msg, "Invalid host / IP", true); return; }
-    if (_ctrDraft.targets.some((t) => t.host === host)) { _formMsg(msg, "Host already listed", true); return; }
+    if (!_validHost(host)) { _formMsg(msg, "Invalid host / IP", true); hostEl.focus(); return; }
+    if (_ctrDraft.targets.some((t) => t.host === host)) { _formMsg(msg, "Host already listed", true); hostEl.focus(); return; }
     if (_ctrDraft.targets.length >= 128) { _formMsg(msg, "Too many containers", true); return; }
     _ctrDraft.targets.push({ name, host });
     nameEl.value = ""; hostEl.value = "";
     if (msg) { msg.textContent = ""; msg.className = "kform-msg"; }
     _ctrRenderList();
+    nameEl.focus();  // ready for the next entry
+  };
+  wire("ctr-add-btn", ctrAdd);
+  // Keyboard flow: Enter in NAME jumps to HOST, Enter in HOST adds the
+  // row — so a whole list can be typed without reaching for the button.
+  const nameInput = document.getElementById("ctr-add-name");
+  const hostInput = document.getElementById("ctr-add-host");
+  if (nameInput) nameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); hostInput && hostInput.focus(); }
+  });
+  if (hostInput) hostInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); ctrAdd(); }
   });
   wire("ctr-save", async () => {
     const msg = document.getElementById("ctr-msg");
