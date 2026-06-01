@@ -1439,25 +1439,6 @@ function _wResolveColumns(cspec, stored) {
     const bottom = entry && validIds.has(entry.bottom) ? entry.bottom : null;
     return { top, bottom };
   });
-  // Self-heal newly-introduced widgets. A widget added to the spec
-  // *after* the user last saved their default-layout columns (e.g.
-  // CONTAINERS) won't appear in any stored column, so it can never
-  // claim a slot and stays invisible forever — even once its data is
-  // flowing. Seed any such widget into its default home slot when that
-  // slot is currently empty, without disturbing the user's other picks.
-  if (src) {
-    const placed = new Set();
-    cols.forEach((c) => { if (c.top) placed.add(c.top); if (c.bottom) placed.add(c.bottom); });
-    defaults.forEach((d, i) => {
-      ["top", "bottom"].forEach((pos) => {
-        const id = d[pos];
-        if (id && validIds.has(id) && !placed.has(id) && !cols[i][pos]) {
-          cols[i][pos] = id;
-          placed.add(id);
-        }
-      });
-    });
-  }
   return cols;
 }
 
@@ -2079,11 +2060,64 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeWidgetsModal();
 });
 
+// ── One-time migration for widgets added after a user saved their
+// custom default-layout columns ───────────────────────────────────
+// A widget introduced later (e.g. CONTAINERS) is absent from any
+// previously-saved column config, so it can never claim a slot and
+// stays invisible — even once its data flows. We seed it into the
+// first empty slot of an existing column ONCE, persist that, and
+// record it in a marker so we never touch the user's choice again
+// (they're then free to move or remove it; it won't resurrect, and
+// disabling a column keeps working). Widgets added here must be in
+// the default columnSpec already; the migration just surfaces them in
+// pre-existing custom configs.
+const WIDGETS_ADDED_AFTER_LAUNCH = ["containers"];
+function _wMigrateNewWidgets(layout) {
+  const spec = LAYOUT_WIDGETS[layout] && LAYOUT_WIDGETS[layout].columnSpec;
+  if (!spec) return;
+  const markerKey = WIDGET_STORAGE_PREFIX + layout + ".migrated";
+  let marker = [];
+  try { marker = JSON.parse(localStorage.getItem(markerKey)) || []; } catch (e) {}
+  const pending = WIDGETS_ADDED_AFTER_LAUNCH.filter((id) => !marker.includes(id));
+  if (!pending.length) return;
+
+  const validIds = new Set(spec.widgets.map((w) => w.id));
+  const stored = _wLoadConfig(layout);
+  const hasCustom = stored && stored.version === 2 && Array.isArray(stored.columns);
+
+  // No custom config → defaults already include the new widget, so just
+  // record it as migrated and move on without rewriting anything.
+  if (hasCustom) {
+    const cols = stored.columns;
+    const placed = new Set();
+    cols.forEach((c) => { if (c.top) placed.add(c.top); if (c.bottom) placed.add(c.bottom); });
+    let changed = false;
+    for (const id of pending) {
+      if (!validIds.has(id) || placed.has(id)) continue;
+      // First empty half of an already-active column (never resurrect a
+      // fully-disabled column — that's a deliberate user choice).
+      let target = null;
+      for (const c of cols) {
+        if (c.top && !c.bottom) { target = c; target._pos = "bottom"; break; }
+        if (!c.top && c.bottom) { target = c; target._pos = "top"; break; }
+      }
+      if (target) {
+        target[target._pos] = id; delete target._pos;
+        placed.add(id); changed = true;
+      }
+    }
+    if (changed) _wSaveConfig(layout, { version: 2, columns: cols.map(
+      (c) => ({ top: c.top || null, bottom: c.bottom || null })) });
+  }
+  try { localStorage.setItem(markerKey, JSON.stringify(marker.concat(pending))); } catch (e) {}
+}
+
 // Apply for every layout on load so hidden layouts (data-layout
 // inactive) are already configured the moment the user switches
 // to them — config persistence is per-layout, so each one keeps
 // its own ON/OFF set and ordering across reloads.
 (function _wApplyAll() {
+  _wMigrateNewWidgets("default");
   for (const name of Object.keys(LAYOUT_WIDGETS)) applyWidgetConfig(name);
 })();
 

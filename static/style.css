@@ -109,18 +109,16 @@ body {
 /* ── Layout grid ───────────────────────────────────────────────── */
 /* `.panels` is the default layout's column row. The grid template adapts
    to the number of *visible* columns so that hiding a column expands the
-   surviving ones to fill the width (set by JS via --visible-cols). The
-   per-column fr weights still apply when all four are visible, picked
-   by [data-col-id]. */
+   surviving ones to fill the width (set by JS via --visible-cols). Every
+   column gets an equal share — columns are reshapeable at runtime, so a
+   fixed per-column weighting just made whichever widget landed in slot 2
+   look arbitrarily narrower than its neighbours. */
 .panels {
   display: grid; gap: 4px;
   grid-template-columns: repeat(var(--visible-cols, 4), minmax(0, 1fr));
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-}
-.panels[data-visible-cols="4"] {
-  grid-template-columns: 1.15fr 0.9fr 1.2fr 1.15fr;
 }
 .panels > .panel[hidden] { display: none !important; }
 .panel {
