@@ -53,34 +53,46 @@
     <button class="modal-close" id="settings-close" aria-label="Close settings">×</button>
     <div class="theme-modal-title">OPTIONS</div>
     <div class="settings-grid">
-      <button class="settings-btn" id="settings-layout-btn">
-        <span class="settings-btn-label">LAYOUT</span>
-        <span class="settings-btn-value" id="settings-layout-value">—</span>
-      </button>
-      <button class="settings-btn" id="settings-widgets-btn">
-        <span class="settings-btn-label">WIDGETS</span>
-        <span class="settings-btn-value" id="settings-widgets-value">configure</span>
-      </button>
-      <button class="settings-btn" id="settings-network-btn">
-        <span class="settings-btn-label">NETWORK</span>
-        <span class="settings-btn-value" id="settings-network-value">ping targets</span>
-      </button>
-      <button class="settings-btn" id="settings-containers-btn">
-        <span class="settings-btn-label">CONTAINERS</span>
-        <span class="settings-btn-value" id="settings-containers-value">configure</span>
-      </button>
-      <button class="settings-btn" id="settings-graph-btn">
-        <span class="settings-btn-label">LINE MODE</span>
-        <span class="settings-btn-value" id="settings-graph-value">—</span>
-      </button>
-      <button class="settings-btn" id="settings-temp-btn">
-        <span class="settings-btn-label">TEMP UNIT</span>
-        <span class="settings-btn-value" id="settings-temp-value">°C</span>
-      </button>
-      <button class="settings-btn" id="settings-theme-btn">
-        <span class="settings-btn-label">THEME</span>
-        <span class="settings-btn-value" id="settings-theme-value">—</span>
-      </button>
+      <!-- Appearance & formatting — how things look/read. -->
+      <div class="settings-section">
+        <div class="settings-section-title">APPEARANCE</div>
+        <button class="settings-btn" id="settings-theme-btn">
+          <span class="settings-btn-label">THEME</span>
+          <span class="settings-btn-value" id="settings-theme-value">—</span>
+        </button>
+        <button class="settings-btn" id="settings-graph-btn">
+          <span class="settings-btn-label">LINE MODE</span>
+          <span class="settings-btn-value" id="settings-graph-value">—</span>
+        </button>
+        <button class="settings-btn" id="settings-temp-btn">
+          <span class="settings-btn-label">TEMP UNIT</span>
+          <span class="settings-btn-value" id="settings-temp-value">°C</span>
+        </button>
+      </div>
+      <!-- Layout — structure and which widgets show. -->
+      <div class="settings-section">
+        <div class="settings-section-title">LAYOUT</div>
+        <button class="settings-btn" id="settings-layout-btn">
+          <span class="settings-btn-label">LAYOUT</span>
+          <span class="settings-btn-value" id="settings-layout-value">—</span>
+        </button>
+        <button class="settings-btn" id="settings-widgets-btn">
+          <span class="settings-btn-label">WIDGETS</span>
+          <span class="settings-btn-value" id="settings-widgets-value">configure</span>
+        </button>
+      </div>
+      <!-- Monitoring — what the kiosk watches. -->
+      <div class="settings-section">
+        <div class="settings-section-title">MONITORING</div>
+        <button class="settings-btn" id="settings-network-btn">
+          <span class="settings-btn-label">NETWORK</span>
+          <span class="settings-btn-value" id="settings-network-value">ping targets</span>
+        </button>
+        <button class="settings-btn" id="settings-containers-btn">
+          <span class="settings-btn-label">CONTAINERS</span>
+          <span class="settings-btn-value" id="settings-containers-value">configure</span>
+        </button>
+      </div>
     </div>
     <div class="theme-modal-hint">tap a row to change</div>
   </div>

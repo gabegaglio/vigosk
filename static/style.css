@@ -590,7 +590,9 @@ body {
 }
 .proc-head, .proc-row {
   display: grid;
-  grid-template-columns: 46px 1fr 38px 38px;
+  /* Extra width on the PID column lands to the right of the (left-aligned)
+     number, opening a clearer gap before the process name. */
+  grid-template-columns: 72px 1fr 38px 38px;
   gap: 4px; align-items: center;
   padding: 0 2px;
 }
@@ -605,7 +607,7 @@ body {
   display: flex; flex-direction: column;
   flex: 1 1 auto; min-height: 0; overflow: hidden;
 }
-.proc-row .pid { color: var(--dim); }
+.proc-row .pid { color: var(--dim); padding-right: 12px; }
 .proc-row .name {
   color: var(--fg); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
@@ -640,10 +642,14 @@ body {
 }
 .ctr-row {
   display: grid;
-  grid-template-columns: 12px 1fr auto auto;
+  /* Fixed host + status columns so every IP starts at the same x and
+     the status ("12.3 ms" / DOWN / CNR) can't shove the IPs out of
+     line by its own varying length. */
+  grid-template-columns: 12px 1fr 13ch 8ch;
   gap: 6px; align-items: center;
   flex: 0 0 auto; min-height: 0;
   padding: 1px 2px;
+  cursor: pointer;
 }
 .ctr-dot {
   width: 8px; height: 8px; border-radius: 50%;
@@ -660,9 +666,9 @@ body {
 .ctr-host {
   color: var(--dim); font-size: 10px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 11ch; text-align: right;
+  text-align: left;
 }
-.ctr-ms { text-align: right; font-weight: 600; color: var(--fg-bright); }
+.ctr-ms { text-align: right; font-weight: 600; color: var(--fg-bright); white-space: nowrap; }
 .ctr-row.ctr-down .ctr-ms { color: var(--crit); }
 .ctr-row.ctr-pending .ctr-ms { color: var(--dim); }
 /* Condensed typography when the widget shares a column (pair mode). */
@@ -850,8 +856,22 @@ body::after {
 
 .settings-modal .settings-grid {
   display: flex; flex-direction: column;
-  gap: clamp(6px, 1vh, 12px);
+  /* Larger gap separates the grouped sections; rows inside a section
+     sit tighter together (see .settings-section). */
+  gap: clamp(12px, 2vh, 22px);
   min-width: min(380px, 86vw);
+}
+.settings-section {
+  display: flex; flex-direction: column;
+  gap: clamp(5px, 0.8vh, 9px);
+}
+.settings-section-title {
+  color: var(--accent-3);
+  font-size: clamp(9px, 1.2vh, 12px);
+  font-weight: 700; letter-spacing: 2.5px;
+  text-transform: uppercase;
+  padding: 0 2px clamp(2px, 0.5vh, 5px);
+  border-bottom: 1px solid var(--dim-2);
 }
 .settings-btn {
   display: flex; align-items: center; justify-content: space-between;

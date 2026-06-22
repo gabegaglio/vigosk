@@ -1395,6 +1395,15 @@ function closeContainersModal() { _modalHide("containers-modal"); }
     cm.addEventListener("pointerdown", (e) => e.stopPropagation());
     cm.addEventListener("pointerup",   (e) => e.stopPropagation());
   }
+  // Tapping anywhere on the live CONTAINERS widget jumps straight to its
+  // editor — no need to route through the settings chip. The element keeps
+  // the same id when the layout applier relocates it, so this stays wired.
+  const cw = document.getElementById("containers-half");
+  if (cw) {
+    cw.addEventListener("click", (e) => { e.stopPropagation(); e.preventDefault(); openContainersModal(); });
+    cw.addEventListener("pointerdown", (e) => e.stopPropagation());
+    cw.addEventListener("pointerup",   (e) => e.stopPropagation());
+  }
 })();
 
 _wireSettingsBtn("settings-network-btn",    openNetworkModal);

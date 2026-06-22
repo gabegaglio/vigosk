@@ -242,7 +242,9 @@
 }
 .g-proc-row {
   display: grid;
-  grid-template-columns: 46px 1fr 38px 38px;
+  /* Match the panel proc list: wider PID column for breathing room
+     between the id number and the process name. */
+  grid-template-columns: 72px 1fr 38px 38px;
   gap: 4px; align-items: center;
   padding: 0 2px;
   /* Rows distribute the container's height equally — JS picks the row
@@ -252,7 +254,7 @@
   min-height: 0;
   overflow: hidden;
 }
-.g-proc-row .pid  { color: var(--dim); }
+.g-proc-row .pid  { color: var(--dim); padding-right: 12px; }
 .g-proc-row .name { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .g-proc-row .cpu,
 .g-proc-row .mem  { text-align: right; font-weight: 600; }
