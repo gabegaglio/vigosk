@@ -99,7 +99,7 @@ Some settings are editable live from the kiosk UI and persisted server-side
 | `G`       | toggle line / braille graph mode                                |
 | `T`       | theme picker                                                    |
 | `A` · `D` | previous / next theme                                           |
-| `1` – `4` | default · gauges · heatmap · flowstrip layout                   |
+| `1` – `5` | default · gauges · heatmap · flowstrip · minimal layout         |
 | `↑ ↓ ← →` | navigate menu actions                                           |
 | `Enter`   | activate focused action                                         |
 | `?`       | show in-app help overlay                                        |
@@ -108,7 +108,7 @@ Some settings are editable live from the kiosk UI and persisted server-side
 
 ## Layouts
 
-Four built-in layouts, cycle with `1`–`4`.
+Five built-in layouts, cycle with `1`–`5`.
 
 **default** — six-row strip: CPU, MEM, GPU, DISK, NET, PING.
 
@@ -125,6 +125,8 @@ Four built-in layouts, cycle with `1`–`4`.
 **flowstrip** — six-column dense row, uniformly accented.
 
 ![flowstrip layout](docs/screenshots/flowstrip.png)
+
+**minimal** — data-first: a top row of oversized vital percentages (CPU · MEM · DISK · GPU) meant to be read across a room, over a ledger of tightly-aligned tables (processes · network · containers). No graphs, no boxes — alignment grid only. Pairs naturally with the `minimal` theme but reads cleanly under any. Select with `5` (or the layout picker, `L`).
 
 Each layout has its own widget config (slots on/off, order). Reset a layout to defaults via the `↻` on its swatch in the picker (`L`), or via the Widgets modal (`W`) for the active layout.
 

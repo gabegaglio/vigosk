@@ -637,6 +637,91 @@
 
 </div>
 
+<!-- ── Minimal layout ──────────────────────────────────────────────
+     Active when documentElement[data-layout="minimal"]. Data-first by
+     structure (independent of the colour theme): a top row of oversized
+     vital percentages meant to be read across a room, and a bottom
+     ledger of tightly-aligned tables — processes, network, containers —
+     pure numbers on an alignment grid, no graphs and no boxes. Same
+     /api/stats stream as every other layout. -->
+<div class="layout layout-minimal" id="layout-minimal">
+
+  <!-- Vitals: the headline numbers are the hero. GPU autohides and the
+       row collapses to three columns when no iGPU is reported. -->
+  <div class="mn-vitals" id="mn-vitals">
+    <div class="mn-stat">
+      <div class="mn-stat-label">CPU</div>
+      <div class="mn-stat-val" id="mn-cpu-pct">—%</div>
+      <div class="mn-stat-sub" id="mn-cpu-sub">— °C</div>
+    </div>
+    <div class="mn-stat">
+      <div class="mn-stat-label">MEMORY</div>
+      <div class="mn-stat-val" id="mn-mem-pct">—%</div>
+      <div class="mn-stat-sub" id="mn-mem-sub">— / —</div>
+    </div>
+    <div class="mn-stat">
+      <div class="mn-stat-label">DISK</div>
+      <div class="mn-stat-val" id="mn-disk-pct">—%</div>
+      <div class="mn-stat-sub" id="mn-disk-sub">— / —</div>
+    </div>
+    <div class="mn-stat" id="mn-stat-gpu" hidden>
+      <div class="mn-stat-label">GPU</div>
+      <div class="mn-stat-val" id="mn-gpu-pct">—%</div>
+      <div class="mn-stat-sub" id="mn-gpu-sub">—</div>
+    </div>
+  </div>
+
+  <!-- Ledger: three aligned tables. Right-aligned tabular numerics so
+       columns scan cleanly; the lightest hairline rules, no decoration. -->
+  <div class="mn-ledger">
+
+    <section class="mn-col mn-procs-col">
+      <div class="mn-col-head"><span>PROCESSES</span><span class="mn-meta" id="mn-procs-meta">—</span></div>
+      <div class="mn-proc-sub"><span>PID</span><span>NAME</span><span>CPU%</span><span>MEM%</span></div>
+      <div class="mn-rows mn-proc-rows" id="mn-proc-rows"></div>
+    </section>
+
+    <section class="mn-col mn-net-col">
+      <div class="mn-col-head"><span>NETWORK</span><span class="mn-meta" id="mn-net-meta">—</span></div>
+      <div class="mn-kv">
+        <div class="mn-kv-row rates" id="mn-wan-row" hidden>
+          <span class="mn-k">WAN</span>
+          <span class="mn-cell"><span class="mn-arrow">▼</span><span class="mn-v" id="mn-wan-rx">—</span></span>
+          <span class="mn-cell"><span class="mn-arrow">▲</span><span class="mn-v" id="mn-wan-tx">—</span></span>
+        </div>
+        <div class="mn-kv-row rates" id="mn-lan-row" hidden>
+          <span class="mn-k">LAN</span>
+          <span class="mn-cell"><span class="mn-arrow">▼</span><span class="mn-v" id="mn-lan-rx">—</span></span>
+          <span class="mn-cell"><span class="mn-arrow">▲</span><span class="mn-v" id="mn-lan-tx">—</span></span>
+        </div>
+        <div class="mn-kv-row rates mn-dim">
+          <span class="mn-k">PEAK</span>
+          <span class="mn-cell"><span class="mn-arrow">▼</span><span class="mn-v" id="mn-peak-rx">—</span></span>
+          <span class="mn-cell"><span class="mn-arrow">▲</span><span class="mn-v" id="mn-peak-tx">—</span></span>
+        </div>
+        <div class="mn-kv-row ping">
+          <span class="mn-k">GW</span>
+          <span class="mn-target" id="mn-gw-target">—</span>
+          <span class="mn-v mn-ms" id="mn-gw-ms">— ms</span>
+        </div>
+        <div class="mn-kv-row ping">
+          <span class="mn-k">EXT</span>
+          <span class="mn-target" id="mn-ext-target">—</span>
+          <span class="mn-v mn-ms" id="mn-ext-ms">— ms</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="mn-col mn-ctr-col" id="mn-ctr-col">
+      <div class="mn-col-head"><span>CONTAINERS</span><span class="mn-meta" id="mn-ctr-meta">—</span></div>
+      <div class="mn-rows mn-ctr-rows" id="mn-ctr-rows"></div>
+      <div class="mn-empty" id="mn-ctr-empty">no targets configured</div>
+    </section>
+
+  </div>
+
+</div>
+
 <script src="static/app.js"></script>
 <script src="static/layouts.js"></script>
 </body>

@@ -11,18 +11,20 @@
 // same numbers the user sees on the default panel.
 // ══════════════════════════════════════════════════════════════════
 
-const LAYOUTS = ["default", "gauges", "heatmap", "flowstrip"];
+const LAYOUTS = ["default", "gauges", "heatmap", "flowstrip", "minimal"];
 const LAYOUT_LABELS = {
   default:    "DEFAULT",
   gauges:     "GAUGES",
   heatmap:    "HEATMAP",
   flowstrip:  "FLOWSTRIP",
+  minimal:    "MINIMAL",
 };
 const LAYOUT_CHIP = {
   default:    "DFLT",
   gauges:     "GAUG",
   heatmap:    "HEAT",
   flowstrip:  "FLOW",
+  minimal:    "MNML",
 };
 
 let currentLayout = (() => {
@@ -149,6 +151,28 @@ function buildLayoutSwatch(name) {
     const procs = document.createElement("div");
     procs.className = "procs";
     preview.append(cols, procs);
+  } else if (name === "minimal") {
+    // Top: a row of four big number blocks (the vitals). Bottom: three
+    // ledger columns of stacked text lines. All dimensions come from the
+    // .preview-minimal CSS so the sketch tracks the live proportions.
+    const vitals = document.createElement("div");
+    vitals.className = "vitals";
+    for (let i = 0; i < 4; i++) {
+      const v = document.createElement("div");
+      v.className = "stat";
+      v.innerHTML = '<span class="num"></span>';
+      vitals.appendChild(v);
+    }
+    const ledger = document.createElement("div");
+    ledger.className = "ledger";
+    for (let i = 0; i < 3; i++) {
+      const col = document.createElement("div");
+      col.className = "lcol";
+      col.innerHTML = '<span class="line head"></span><span class="line"></span>' +
+                      '<span class="line"></span><span class="line short"></span>';
+      ledger.appendChild(col);
+    }
+    preview.append(vitals, ledger);
   }
 
   const label = document.createElement("div");
@@ -1190,6 +1214,227 @@ window.layoutOnTick = function (s, sm) {
   if (typeof _layoutOnTick_heatmap === "function") _layoutOnTick_heatmap(s, sm);
   try { _renderFlowstrip(s, sm); }
   catch (e) { /* keep ticks resilient if flowstrip DOM not ready */ }
+};
+
+// ══════════════════════════════════════════════════════════════════
+// Minimal renderer
+// ──────────────────────────────────────────────────────────────────
+// Data-first: oversized vital percentages up top, a ledger of aligned
+// tables below. No graphs — just numbers. Pulls from the same `s`/`sm`
+// the other renderers use, and tints the headline numbers through
+// _gColorForPct so a value only takes on colour when it crosses a
+// threshold (the same alert semantics the rest of the kiosk uses).
+// ──────────────────────────────────────────────────────────────────
+function _mnSetColor(el, col) {
+  if (el && el._c !== col) { el.style.color = col; el._c = col; }
+}
+function _mnSetPct(id, pct) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  _gSetText(el, pct.toFixed(0) + "%");
+  _mnSetColor(el, _gColorForPct(Math.min(100, pct)));
+}
+
+const MN_PROC_ROW_PX = 15;
+const MN_PROC_ROW_MIN = 13;
+function _mnFitRows(root, px, minpx) {
+  if (!root) return 0;
+  const h = root.clientHeight;
+  if (h < minpx) return 0;
+  const ideal = Math.round(h / px);
+  const floor = Math.floor(h / minpx);
+  return Math.max(1, Math.min(ideal, floor));
+}
+function _mnEnsureProcRows(n) {
+  const root = document.getElementById("mn-proc-rows");
+  if (!root) return null;
+  while (root.children.length < n) {
+    const row = document.createElement("div");
+    row.className = "mn-proc-row";
+    const pid = document.createElement("span"); pid.className = "pid";
+    const nm  = document.createElement("span"); nm.className  = "name";
+    const cpu = document.createElement("span"); cpu.className = "cpu";
+    const mem = document.createElement("span"); mem.className = "mem";
+    row.append(pid, nm, cpu, mem);
+    root.appendChild(row);
+  }
+  while (root.children.length > n) root.removeChild(root.lastChild);
+  return root;
+}
+function _mnEnsureCtrRows(n) {
+  const root = document.getElementById("mn-ctr-rows");
+  if (!root) return null;
+  while (root.children.length < n) {
+    const row = document.createElement("div");
+    row.className = "mn-ctr-row";
+    const dot  = document.createElement("span"); dot.className  = "dot";
+    const nm   = document.createElement("span"); nm.className   = "name";
+    const host = document.createElement("span"); host.className = "host";
+    const ms   = document.createElement("span"); ms.className   = "ms";
+    row.append(dot, nm, host, ms);
+    root.appendChild(row);
+  }
+  while (root.children.length > n) root.removeChild(root.lastChild);
+  return root;
+}
+
+function _renderMinimal(s, sm) {
+  // ── Vitals ──
+  const cpuPct  = sm && Number.isFinite(sm.cpuPct)  ? sm.cpuPct  : (s.cpu && s.cpu.avg) || 0;
+  const memPct  = sm && Number.isFinite(sm.memPct)  ? sm.memPct  : (s.mem && s.mem.percent) || 0;
+  const diskPct = sm && Number.isFinite(sm.diskPct) ? sm.diskPct : (s.disk && s.disk.percent) || 0;
+
+  _mnSetPct("mn-cpu-pct", cpuPct);
+  _gSetText(document.getElementById("mn-cpu-sub"), window.__kioskFmtTemp(s.cpu && s.cpu.temp_c));
+
+  _mnSetPct("mn-mem-pct", memPct);
+  if (s.mem) {
+    _gSetText(document.getElementById("mn-mem-sub"),
+      _gFmtBytes(s.mem.used) + " / " + _gFmtBytes(s.mem.total));
+  }
+
+  const primary = _gPickPrimaryDisk(s.disks) || (s.disk && {
+    label: "/", total: s.disk.total, used: s.disk.used, percent: s.disk.percent,
+  });
+  if (primary) {
+    _mnSetPct("mn-disk-pct", primary.percent);
+    _gSetText(document.getElementById("mn-disk-sub"),
+      _gFmtBytes(primary.used) + " / " + _gFmtBytes(primary.total));
+  }
+
+  // GPU autohides; the vitals grid drops to 3 columns when absent.
+  const gpuStat = document.getElementById("mn-stat-gpu");
+  const vitals = document.getElementById("mn-vitals");
+  const gpu = s.gpu;
+  if (gpu && gpu.available) {
+    if (gpuStat && gpuStat.hidden) gpuStat.hidden = false;
+    if (vitals) vitals.classList.remove("no-gpu");
+    _mnSetPct("mn-gpu-pct", gpu.busy || 0);
+    let sub = "—";
+    if (gpu.temp_c != null) sub = window.__kioskFmtTemp(gpu.temp_c);
+    else if (gpu.power_w != null) sub = gpu.power_w.toFixed(1) + " W";
+    _gSetText(document.getElementById("mn-gpu-sub"), sub);
+  } else {
+    if (gpuStat && !gpuStat.hidden) gpuStat.hidden = true;
+    if (vitals) vitals.classList.add("no-gpu");
+  }
+
+  // ── Network ledger ──
+  const wan = s.net && s.net.wan;
+  const wanRow = document.getElementById("mn-wan-row");
+  if (wan && wan.iface) {
+    if (wanRow) wanRow.hidden = false;
+    _gSetText(document.getElementById("mn-wan-rx"), _gFmtRate(wan.rx || 0));
+    _gSetText(document.getElementById("mn-wan-tx"), _gFmtRate(wan.tx || 0));
+  } else if (wanRow) wanRow.hidden = true;
+
+  const lan = s.net && s.net.lan;
+  const lanRow = document.getElementById("mn-lan-row");
+  if (lan && Array.isArray(lan.ifaces) && lan.ifaces.length) {
+    if (lanRow) lanRow.hidden = false;
+    _gSetText(document.getElementById("mn-lan-rx"), _gFmtRate(lan.rx || 0));
+    _gSetText(document.getElementById("mn-lan-tx"), _gFmtRate(lan.tx || 0));
+  } else if (lanRow) lanRow.hidden = true;
+
+  const peaks = (typeof window.__kioskPeaks === "function") ? window.__kioskPeaks() : { rx: 0, tx: 0 };
+  _gSetText(document.getElementById("mn-peak-rx"), _gFmtRate(peaks.rx || 0));
+  _gSetText(document.getElementById("mn-peak-tx"), _gFmtRate(peaks.tx || 0));
+
+  const ping = s.net && s.net.ping;
+  if (ping) {
+    if (ping.gw) {
+      _gSetText(document.getElementById("mn-gw-target"), ping.gw.target || "—");
+      const gwEl = document.getElementById("mn-gw-ms");
+      _gSetText(gwEl, ping.gw.ms == null ? "↯" : ping.gw.ms.toFixed(1) + " ms");
+      _mnSetColor(gwEl, ping.gw.ms == null ? "var(--crit)"
+        : (ping.gw.ms > 60 ? "var(--warn)" : "var(--fg-bright)"));
+    }
+    if (ping.ext) {
+      _gSetText(document.getElementById("mn-ext-target"), ping.ext.target || "—");
+      const exEl = document.getElementById("mn-ext-ms");
+      _gSetText(exEl, ping.ext.ms == null ? "↯" : ping.ext.ms.toFixed(1) + " ms");
+      _mnSetColor(exEl, ping.ext.ms == null ? "var(--crit)"
+        : (ping.ext.ms > 60 ? "var(--warn)" : "var(--fg-bright)"));
+    }
+  }
+  const scale = ping && ping.gw && ping.gw.scale_ms;
+  _gSetText(document.getElementById("mn-net-meta"),
+    scale ? `0–${scale} ms` : ((wan && wan.iface) ? wan.iface : "—"));
+
+  // ── Processes ledger ──
+  if (Array.isArray(s.procs_top)) {
+    _gSetText(document.getElementById("mn-procs-meta"), (s.procs || s.procs_top.length) + " total");
+    const procList = (typeof window.__kioskSortProcs === "function")
+      ? window.__kioskSortProcs(s.procs_top) : s.procs_top;
+    const root = document.getElementById("mn-proc-rows");
+    const fit = _mnFitRows(root, MN_PROC_ROW_PX, MN_PROC_ROW_MIN);
+    const visible = fit > 0 ? Math.min(procList.length, fit) : procList.length;
+    _mnEnsureProcRows(visible);
+    if (root) {
+      for (let i = 0; i < visible; i++) {
+        const p = procList[i];
+        const row = root.children[i];
+        _gSetText(row.children[0], String(p.pid));
+        if (row.children[1].textContent !== p.name) {
+          row.children[1].textContent = p.name;
+          row.children[1].title = p.name;
+        }
+        _gSetText(row.children[2], p.cpu.toFixed(0));
+        _mnSetColor(row.children[2], _gColorForPct(Math.min(100, p.cpu)));
+        _gSetText(row.children[3], p.mem.toFixed(1));
+        _mnSetColor(row.children[3], _gColorForPct(Math.min(100, p.mem)));
+      }
+    }
+  }
+
+  // ── Containers ledger ──
+  const list = Array.isArray(s.containers) ? s.containers : [];
+  const emptyEl = document.getElementById("mn-ctr-empty");
+  const ctrRoot = document.getElementById("mn-ctr-rows");
+  let up = 0, down = 0;
+  for (const it of list) { if (it.up === true) up++; else if (it.up === false) down++; }
+  const metaEl = document.getElementById("mn-ctr-meta");
+  if (list.length) {
+    _gSetText(metaEl, down > 0 ? `${up} up · ${down} down` : `${up} up`);
+    _mnSetColor(metaEl, down > 0 ? "var(--crit)" : "var(--good)");
+    if (emptyEl) emptyEl.hidden = true;
+    if (ctrRoot) ctrRoot.hidden = false;
+    const fit = _mnFitRows(ctrRoot, MN_PROC_ROW_PX, MN_PROC_ROW_MIN);
+    const visible = fit > 0 ? Math.min(list.length, fit) : list.length;
+    _mnEnsureCtrRows(visible);
+    if (ctrRoot) {
+      for (let i = 0; i < visible; i++) {
+        const it = list[i];
+        const row = ctrRoot.children[i];
+        const state = it.up === true ? "up" : (it.up === false ? "down" : "pending");
+        if (row.dataset.state !== state) {
+          row.dataset.state = state;
+          row.className = "mn-ctr-row ctr-" + state;
+        }
+        if (row.children[1].textContent !== it.name) {
+          row.children[1].textContent = it.name;
+          row.children[1].title = it.name;
+        }
+        _gSetText(row.children[2], it.host || "");
+        let ms;
+        if (it.up === true) ms = (it.ms != null ? it.ms.toFixed(1) + " ms" : "UP");
+        else if (it.up === false) ms = "DOWN";
+        else ms = "CNR";
+        _gSetText(row.children[3], ms);
+      }
+    }
+  } else {
+    _gSetText(metaEl, "—");
+    if (ctrRoot) { _mnEnsureCtrRows(0); ctrRoot.hidden = true; }
+    if (emptyEl) emptyEl.hidden = false;
+  }
+}
+
+const _layoutOnTick_flowstrip = window.layoutOnTick;
+window.layoutOnTick = function (s, sm) {
+  if (typeof _layoutOnTick_flowstrip === "function") _layoutOnTick_flowstrip(s, sm);
+  try { _renderMinimal(s, sm); }
+  catch (e) { /* keep ticks resilient if minimal DOM not ready */ }
 };
 
 // Apply persisted layout on initial load (silent — no toast).
@@ -2411,6 +2656,7 @@ window.addEventListener("keydown", (e) => {
     case "2": e.preventDefault(); applyLayout("gauges");    break;
     case "3": e.preventDefault(); applyLayout("heatmap");   break;
     case "4": e.preventDefault(); applyLayout("flowstrip"); break;
+    case "5": e.preventDefault(); applyLayout("minimal");   break;
   }
 }, true);
 

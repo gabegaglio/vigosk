@@ -1693,3 +1693,233 @@
 [data-theme="minimal"] .fs-procs-banner { border-top: 1px solid var(--dim-2); }
 [data-theme="minimal"] .fs-banner-item:first-child .name { color: var(--fg-bright); }
 [data-theme="minimal"] .fs-banner-item:first-child .pct { color: var(--dim); opacity: 1; }
+
+/* ════════════════════════════════════════════════════════════════
+   MINIMAL layout — data-first: oversized vitals + an aligned ledger.
+   ────────────────────────────────────────────────────────────────
+   Structure (not colour) carries the "minimal" idea here, so it reads
+   cleanly under any theme and shines under the `minimal` theme. Top:
+   a row of big vital percentages meant to be read across a room.
+   Bottom: three tables (processes / network / containers) on a shared
+   alignment grid — tabular numerics, right-aligned numbers, lightest
+   hairline rules, no graphs, no boxes. Same /api/stats as every layout.
+   ════════════════════════════════════════════════════════════════ */
+[data-layout="minimal"] .panels { display: none; }
+[data-layout="minimal"] .layout-minimal { display: flex; }
+
+.layout-minimal {
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Vitals row ──────────────────────────────────────────────────── */
+.mn-vitals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.mn-vitals.no-gpu { grid-template-columns: repeat(3, 1fr); }
+.mn-stat {
+  display: flex; flex-direction: column;
+  align-items: baseline;
+  gap: 2px;
+  min-width: 0;
+  /* A single hairline separates each vital — the lightest possible
+     rule, not a box. First cell has none. */
+  padding: 2px 0 2px 14px;
+  border-left: 1px solid var(--dim-2);
+}
+.mn-stat:first-child { border-left: none; padding-left: 2px; }
+.mn-stat-label {
+  color: var(--dim);
+  font-size: clamp(10px, 1.6vh, 14px);
+  font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+}
+.mn-stat-val {
+  color: var(--fg-bright);
+  font-variant-numeric: tabular-nums;
+  /* The hero number — scales with viewport height so it stays the
+     dominant element from 280px strips to 720p+ panels. */
+  font-size: clamp(38px, 13vh, 116px);
+  font-weight: 700; line-height: 0.95; letter-spacing: -2px;
+}
+.mn-stat-sub {
+  color: var(--dim);
+  font-size: clamp(11px, 1.7vh, 15px);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ── Ledger ──────────────────────────────────────────────────────── */
+.mn-ledger {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.mn-col {
+  display: flex; flex-direction: column;
+  min-height: 0; min-width: 0;
+  gap: 3px;
+}
+.mn-col-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  color: var(--dim);
+  font-size: clamp(10px, 1.5vh, 13px);
+  font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+  border-bottom: 1px solid var(--dim-2);
+  padding-bottom: 3px;
+}
+.mn-col-head .mn-meta {
+  font-weight: 400; letter-spacing: 0; text-transform: none;
+  color: var(--dim); font-size: clamp(10px, 1.4vh, 12px);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Processes table */
+.mn-proc-sub,
+.mn-proc-row {
+  display: grid;
+  grid-template-columns: 64px 1fr 44px 44px;
+  gap: 8px; align-items: center;
+  padding: 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+.mn-proc-sub {
+  color: var(--dim);
+  font-size: clamp(9px, 1.2vh, 11px);
+  letter-spacing: 0.5px; text-transform: uppercase;
+  padding-bottom: 2px;
+}
+.mn-proc-sub span:nth-child(3),
+.mn-proc-sub span:nth-child(4),
+.mn-proc-row .cpu,
+.mn-proc-row .mem { text-align: right; }
+.mn-proc-rows {
+  display: flex; flex-direction: column;
+  flex: 1 1 auto; min-height: 0; overflow: hidden;
+}
+.mn-proc-row {
+  flex: 1 1 0; min-height: 0;
+  font-size: clamp(11px, 1.6vh, 14px);
+}
+.mn-proc-row .pid  { color: var(--dim); }
+.mn-proc-row .name {
+  color: var(--fg); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.mn-proc-row .cpu,
+.mn-proc-row .mem { color: var(--fg-bright); font-weight: 600; }
+
+/* Network key→value block */
+.mn-kv {
+  display: flex; flex-direction: column;
+  gap: clamp(3px, 1vh, 9px);
+  font-size: clamp(11px, 1.7vh, 15px);
+  font-variant-numeric: tabular-nums;
+  padding-top: 2px;
+}
+.mn-kv-row {
+  display: grid;
+  align-items: baseline;
+  gap: 8px;
+}
+.mn-kv-row.rates { grid-template-columns: 44px 1fr 1fr; }
+.mn-kv-row.ping  { grid-template-columns: 44px 1fr auto; }
+.mn-kv-row.mn-dim .mn-k,
+.mn-kv-row.mn-dim .mn-v { color: var(--dim); }
+.mn-k {
+  color: var(--dim); font-weight: 700; letter-spacing: 1px;
+  font-size: clamp(10px, 1.4vh, 13px);
+}
+.mn-cell { display: inline-flex; align-items: baseline; gap: 6px; justify-content: flex-end; }
+.mn-arrow { color: var(--dim); font-size: 0.8em; }
+.mn-v { color: var(--fg-bright); text-align: right; }
+.mn-target {
+  color: var(--dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mn-ms { text-align: right; font-weight: 600; }
+
+/* Containers table */
+.mn-ctr-rows {
+  display: flex; flex-direction: column;
+  flex: 1 1 auto; min-height: 0; overflow: hidden;
+  padding-top: 2px;
+}
+.mn-ctr-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto auto;
+  gap: 8px; align-items: center;
+  flex: 1 1 0; min-height: 0;
+  font-size: clamp(11px, 1.6vh, 14px);
+  font-variant-numeric: tabular-nums;
+}
+.mn-ctr-row .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dim); justify-self: center;
+}
+.mn-ctr-row.ctr-up   .dot { background: var(--good); }
+.mn-ctr-row.ctr-down .dot { background: var(--crit); }
+.mn-ctr-row .name {
+  color: var(--fg); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.mn-ctr-row .host {
+  color: var(--dim); font-size: 0.85em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mn-ctr-row .ms { color: var(--fg-bright); font-weight: 600; text-align: right; }
+.mn-ctr-row.ctr-down .ms { color: var(--crit); }
+.mn-ctr-row.ctr-pending .ms { color: var(--dim); }
+.mn-empty {
+  color: var(--dim); font-size: clamp(10px, 1.4vh, 12px);
+  padding: 6px 2px; font-style: italic;
+}
+
+/* ── Short / tall screen density tweaks (mirror style.css strategy) ── */
+@media (max-height: 320px) {
+  .layout-minimal { gap: 4px; }
+  .mn-ledger { gap: 12px; }
+  .mn-stat-val { font-size: clamp(34px, 16vh, 80px); }
+}
+@media (min-height: 600px) {
+  .layout-minimal { gap: 14px; }
+  .mn-ledger { gap: 26px; }
+}
+
+/* ── Layout-picker preview (preview-minimal) ─────────────────────── */
+.preview-minimal {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 3px;
+}
+.preview-minimal .vitals {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 3px; flex: 0 0 42%;
+}
+.preview-minimal .stat {
+  display: flex; align-items: center; justify-content: center;
+  border-left: 1px solid var(--dim-2);
+}
+.preview-minimal .stat:first-child { border-left: none; }
+.preview-minimal .stat .num {
+  width: 60%; height: 52%;
+  background: var(--fg); opacity: 0.85; border-radius: 1px;
+}
+.preview-minimal .ledger {
+  display: grid; grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 5px; flex: 1 1 auto; min-height: 0;
+}
+.preview-minimal .lcol {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.preview-minimal .lcol .line {
+  height: 2px; background: var(--dim); border-radius: 1px;
+}
+.preview-minimal .lcol .line.head { background: var(--dim-2); width: 70%; }
+.preview-minimal .lcol .line.short { width: 55%; }
