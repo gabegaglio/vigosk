@@ -1388,7 +1388,9 @@ function _renderMinimal(s, sm) {
   }
 
   // ── Containers ledger ──
-  const list = Array.isArray(s.containers) ? s.containers : [];
+  // Stats ship containers as { interval_s, max_per_cycle, list:[…] };
+  // the watch list lives under .list (same unwrap renderContainers uses).
+  const list = (s.containers && Array.isArray(s.containers.list)) ? s.containers.list : [];
   const emptyEl = document.getElementById("mn-ctr-empty");
   const ctrRoot = document.getElementById("mn-ctr-rows");
   let up = 0, down = 0;
