@@ -1623,3 +1623,73 @@
   .fs-col .fs-sub { font-size: 13px; }
   .fs-procs-banner { padding: 10px 16px; font-size: 14px; gap: 20px; }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   MINIMAL theme — per-layout overrides (gauges / heatmap / flowstrip)
+   ────────────────────────────────────────────────────────────────
+   Same intent as the themes.css block: strip boxes/stripes/gradients/
+   glow and keep colour for alerts only. The gauge ring, heat ramp and
+   flowstrip graphs all tint from CSS variables, so the monochrome
+   palette already routes warm accent to the warn/crit bands — these
+   rules just flatten the surrounding chrome and snap the animated
+   fills so frames are deterministic.
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Gauges ─────────────────────────────────────────────────────── */
+[data-theme="minimal"] .gauges-card {
+  background: var(--panel);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+[data-theme="minimal"] .gauges-card::before { display: none; }
+/* Thin monochrome ring; warm accent only when the value class flips to
+   warn/crit. The arc snaps to its target rather than gliding. */
+[data-theme="minimal"] .gauge-track { stroke: var(--dim-2); }
+[data-theme="minimal"] .gauge-fill {
+  stroke: var(--fg);
+  transition: none;
+}
+[data-theme="minimal"] .gauge-fill.good,
+[data-theme="minimal"] .gauge-fill.calm { stroke: var(--dim); }
+[data-theme="minimal"] .gauge-fill.warn { stroke: var(--warn); }
+[data-theme="minimal"] .gauge-fill.crit { stroke: var(--crit); }
+[data-theme="minimal"] .gauge-label { color: var(--dim); letter-spacing: 1px; }
+[data-theme="minimal"] .gauge-value { color: var(--fg-bright); }
+[data-theme="minimal"] .g-core .bar { background: var(--grid); border: none; }
+[data-theme="minimal"] .g-core .bar > .fill {
+  background: var(--dim) !important;
+  transition: none !important;
+}
+
+/* ── Heatmap ────────────────────────────────────────────────────── */
+[data-theme="minimal"] .hm-pct,
+[data-theme="minimal"] .hm-card {
+  background: var(--panel);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+[data-theme="minimal"] .hm-pct::before,
+[data-theme="minimal"] .hm-card::before { display: none; }
+[data-theme="minimal"] .hm-pct-tag { color: var(--dim); }
+[data-theme="minimal"] .hm-pct-val { color: var(--fg-bright); }
+/* The cells already form a luminance ramp via _hmHeatColor → CSS vars
+   (grid → good → accent-2 → warn → crit); the monochrome palette makes
+   that read as a near-greyscale density grid that only warms at the top
+   band. Kill the live-cell colour fade so the grid is deterministic. */
+[data-theme="minimal"] .hm-core-strip > .hm-core-cell:last-child {
+  transition: none;
+}
+
+/* ── Flowstrip ──────────────────────────────────────────────────── */
+/* Already box-less; just trade the dashed divider for the lightest solid
+   hairline and neutralise the decorative top-proc tint — the number is
+   the hero, not a colour. */
+[data-theme="minimal"] .fs-col + .fs-col {
+  border-left: 1px solid var(--dim-2);
+}
+[data-theme="minimal"] .fs-label { color: var(--dim); }
+[data-theme="minimal"] .fs-procs-banner { border-top: 1px solid var(--dim-2); }
+[data-theme="minimal"] .fs-banner-item:first-child .name { color: var(--fg-bright); }
+[data-theme="minimal"] .fs-banner-item:first-child .pct { color: var(--dim); opacity: 1; }

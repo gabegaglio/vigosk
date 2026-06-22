@@ -1436,7 +1436,7 @@ armRefresh();
 refresh();
 
 // ── Theme switching: swipe horizontally OR tap the header chip ─────
-const THEMES = ["cyberpunk", "wireframe", "eink", "amber", "matrix", "solarized", "pink", "purple", "midnight"];
+const THEMES = ["cyberpunk", "wireframe", "eink", "amber", "matrix", "solarized", "pink", "purple", "midnight", "minimal"];
 const THEME_LABELS = {
   cyberpunk: "CYBERPUNK",
   wireframe: "WIREFRAME",
@@ -1447,6 +1447,7 @@ const THEME_LABELS = {
   pink:      "PINK",
   purple:    "PURPLE",
   midnight:  "MIDNIGHT",
+  minimal:   "MINIMAL",
 };
 const THEME_CHIP = {
   cyberpunk: "CPK",
@@ -1458,6 +1459,7 @@ const THEME_CHIP = {
   pink:      "PINK",
   purple:    "PRPL",
   midnight:  "MDNT",
+  minimal:   "MNML",
 };
 // Swatch palette previews for the picker modal.
 const THEME_SWATCH = {
@@ -1470,6 +1472,9 @@ const THEME_SWATCH = {
   pink:      ["#1a0e18", "#ffb3d1", "#d9b3ff", "#ff80b3", "#ffd9a8", "#ff8a9f"],
   purple:    ["#0a0518", "#a062ff", "#c084ff", "#6a3fb8", "#88e8b8", "#ff6a90"],
   midnight:  ["#04030c", "#c0bbe0", "#8a83b8", "#4a4478", "#d4b87a", "#d47a7a"],
+  // Near-monochrome with a single warm accent shown last — the accent
+  // only ever surfaces on threshold/alert states, never as styling.
+  minimal:   ["#0a0a0b", "#f2f2f4", "#c8c8cc", "#6a6a72", "#d8a24a", "#e0583e"],
 };
 
 let currentTheme = (() => {

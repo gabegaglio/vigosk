@@ -399,3 +399,169 @@
   background-size: 100% 100%;
   background-repeat: no-repeat;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   MINIMAL theme — data-first, near-monochrome, typography over ornament
+   ────────────────────────────────────────────────────────────────
+   Design intent: a glance returns a NUMBER, not a vibe. Strip the
+   borders, gradients, accent stripes, scanlines and bar glow that the
+   base (cyberpunk) rules bake in, and let whitespace + alignment carry
+   the structure. Color is reserved exclusively for threshold/alert
+   states — every big number, gauge, heat cell and ping value is tinted
+   from CSS variables (colorFor / tempColor / _hmHeatColor / ping bands),
+   so making the calm bands monochrome and the warn/crit bands a single
+   warm accent means color appears ONLY when a value crosses a bound.
+   Nothing here changes data collection or markup — presentation only,
+   and all the clamp()/vh responsive sizing from style.css is inherited
+   untouched so minimal scales across the same screen sizes as the rest.
+   ════════════════════════════════════════════════════════════════ */
+[data-theme="minimal"] {
+  --bg:        #0a0a0b;
+  --panel:     #0e0e10;   /* one whisper off --bg — columns read as separate without a box */
+  --panel-2:   #0e0e10;
+  --border:    #1a1a1d;
+  --grid:      #17171a;   /* empty graph track / coldest heat cell */
+  --fg:        #c8c8cc;
+  --fg-bright: #f4f4f6;   /* the hero: big numbers at rest */
+  --dim:       #6a6a72;   /* muted labels — never compete with the value */
+  --dim-2:     #232328;   /* the lightest possible rule */
+
+  /* "Accents" used by calm/normal bands stay monochrome so they never
+     register as styling. Only --warn / --crit carry the one warm accent,
+     and they only appear when a metric crosses its threshold. */
+  --accent:    #d6d6da;
+  --accent-2:  #b6b6bc;
+  --accent-3:  #2a2a30;
+  --warn:      #d8a24a;   /* the single accent — amber, at the warn band */
+  --crit:      #e0583e;   /* hotter accent — at the crit / down band */
+  --good:      #8a8a90;   /* "normal/up" stays neutral grey, not green */
+  --ghost:     #2a2a30;
+}
+
+/* No scanline / no overlay — static, deterministic frames. */
+[data-theme="minimal"] body { background: var(--bg); }
+[data-theme="minimal"] body::after { display: none; }
+
+/* Header: drop the framed bar; a single hairline under it is enough. */
+[data-theme="minimal"] .header {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--dim-2);
+  border-radius: 0;
+  box-shadow: none;
+}
+[data-theme="minimal"] .header .host {
+  color: var(--fg-bright);
+  letter-spacing: 1px;
+}
+[data-theme="minimal"] .header .clock { color: var(--fg); }
+
+/* Panels: no box, no gradient, no accent stripe — just a flat surface a
+   shade off the background and whitespace. */
+[data-theme="minimal"] .panel {
+  background: var(--panel);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+[data-theme="minimal"] .panel::before { display: none; }
+
+/* Titles/labels are secondary: muted, lighter, tighter — they sit out of
+   the way of the value. The hairline rule replaces the boxed header. */
+[data-theme="minimal"] .panel .title,
+[data-theme="minimal"] .gauges-card-head,
+[data-theme="minimal"] .hm-card-head {
+  color: var(--dim);
+  font-weight: 600;
+  letter-spacing: 1px;
+  border-bottom: 1px solid var(--dim-2);
+}
+
+/* Numbers are the hero. The value colour is driven by colorFor() inline,
+   which resolves to --fg-bright while calm and to the warm accent only
+   past the warn/crit bounds — so the headline reads clean by default and
+   lights up only when it matters. */
+[data-theme="minimal"] .big {
+  font-weight: 700;
+  letter-spacing: -1px;
+}
+
+/* CPU/GPU temp: plain right-aligned number, no chip/box around it. */
+[data-theme="minimal"] .cpu-temp {
+  border: none;
+  padding: 0;
+}
+
+/* Bars: flatten to a thin monochrome rule. No gradient, no glow, and no
+   glide — the fill snaps in place (updates replace values, not animate). */
+[data-theme="minimal"] .bar {
+  background: var(--grid);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+[data-theme="minimal"] .bar > .fill {
+  background: var(--fg) !important;
+  box-shadow: none !important;
+  transition: none !important;
+}
+[data-theme="minimal"] .core .bar > .fill {
+  background: var(--dim) !important;
+}
+
+/* Sparklines: keep the data, drop the decoration. Muted monochrome so the
+   trend supports the number without competing with it. */
+[data-theme="minimal"] .braille,
+[data-theme="minimal"] .braille.cpu,
+[data-theme="minimal"] .braille.mem,
+[data-theme="minimal"] .braille.net,
+[data-theme="minimal"] .braille.net.rx,
+[data-theme="minimal"] .braille.net.tx,
+[data-theme="minimal"] .braille.ping {
+  color: var(--dim);
+}
+[data-theme="minimal"] .spark-line { filter: none; }
+
+/* Arrows and net/io tags go monochrome — direction is conveyed by the
+   glyph, not by colour (colour stays reserved for alerts). */
+[data-theme="minimal"] .arrow,
+[data-theme="minimal"] .net-row .arrow.dn,
+[data-theme="minimal"] .net-row .arrow.up,
+[data-theme="minimal"] .wl-rates .arrow.dn,
+[data-theme="minimal"] .wl-rates .arrow.up,
+[data-theme="minimal"] .io-row .arrow {
+  color: var(--dim);
+}
+
+/* NET breakdown: drop the accent stripe down each WAN/LAN/PING block;
+   tags are muted labels, the rates are the foreground. */
+[data-theme="minimal"] .wl-block {
+  border-left: none;
+  padding-left: 0;
+}
+[data-theme="minimal"] .wl-head .wl-tag,
+[data-theme="minimal"] .wl-head .wl-tag.lan,
+[data-theme="minimal"] .wl-head .wl-tag.ping,
+[data-theme="minimal"] .ping-row .ping-tag {
+  color: var(--dim);
+}
+[data-theme="minimal"] .wl-rates .v { color: var(--fg-bright); }
+
+/* Process / container rules: lightest hairline, no row decoration. */
+[data-theme="minimal"] .proc-head {
+  border-bottom: 1px solid var(--dim-2);
+}
+[data-theme="minimal"] .proc-sort.active { color: var(--fg-bright); }
+
+/* Containers: plain text state. The status dot is the single-character
+   accent indicator for non-running hosts — up stays a neutral grey dot,
+   down is the warm accent; no glow. */
+[data-theme="minimal"] .ctr-dot { box-shadow: none; }
+[data-theme="minimal"] .ctr-row.ctr-up .ctr-dot { background: var(--dim); color: var(--dim); }
+
+/* Chip / theme indicator: flat, no fill wash. */
+[data-theme="minimal"] .theme-chip {
+  background: transparent;
+  border: 1px solid var(--dim-2);
+  color: var(--fg);
+}

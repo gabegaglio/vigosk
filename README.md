@@ -130,7 +130,9 @@ Each layout has its own widget config (slots on/off, order). Reset a layout to d
 
 ## Themes
 
-Multiple terminal-friendly themes (cyber, amber, nord-ish, etc.). Cycle with `A`/`D`; pick directly via `T`.
+Multiple terminal-friendly themes (cyber, amber, nord-ish, etc.). Cycle with `A`/`D`; pick directly via `T`, or open Settings (`S`) → `APPEARANCE` → `THEME` to cycle inline. The choice persists in `localStorage` (`kiosk.theme`).
+
+**minimal** — a data-first theme that strips the borders, gradients, accent stripes, scanlines and bar glow in favor of whitespace and alignment. Near-monochrome by design: each widget leads with its primary metric as the large legible value, labels are muted, and a single warm accent is reserved strictly for threshold/alert states (a value crossing its warn/crit bound, a container going down) so colour carries information rather than style. Works across all four layouts and scales to the same screen sizes as the other themes.
 
 ## Graph modes
 
