@@ -126,10 +126,16 @@
                inputmode="decimal" autocomplete="off" spellcheck="false"
                placeholder="1.1.1.1">
       </label>
+      <label class="kform-row">
+        <span class="kform-label">DNS TEST</span>
+        <input class="kform-input" id="net-dns-input" type="text"
+               inputmode="url" autocomplete="off" spellcheck="false"
+               placeholder="google.com">
+      </label>
       <div class="kform-msg" id="net-msg"></div>
       <button class="kform-save" id="net-save">SAVE</button>
     </div>
-    <div class="theme-modal-hint">blank gateway = auto-detect · IP or hostname</div>
+    <div class="theme-modal-hint">blank gateway = auto-detect · DNS test pings a hostname to verify name resolution</div>
   </div>
 </div>
 
@@ -354,6 +360,12 @@
             <span class="ping-ms" id="ping-ext-ms">— ms</span>
             <pre class="braille ping" id="ping-ext-spark"></pre>
           </div>
+          <div class="ping-row">
+            <span class="ping-tag">DNS</span>
+            <span class="ping-target" id="ping-dns-target">—</span>
+            <span class="ping-ms" id="ping-dns-ms">— ms</span>
+            <pre class="braille ping" id="ping-dns-spark"></pre>
+          </div>
         </div>
       </div>
     </div>
@@ -495,6 +507,12 @@
           <span class="g-target" id="g-ping-ext-target">—</span>
           <span class="g-ms"     id="g-ping-ext-ms">— ms</span>
           <pre class="braille ping" id="g-ping-ext-spark"></pre>
+        </div>
+        <div class="g-net-row g-ping">
+          <span class="g-tag ping">DNS</span>
+          <span class="g-target" id="g-ping-dns-target">—</span>
+          <span class="g-ms"     id="g-ping-dns-ms">— ms</span>
+          <pre class="braille ping" id="g-ping-dns-spark"></pre>
         </div>
         <div class="g-net-row g-rates g-peak">
           <span class="g-tag dim">PEAK</span>
@@ -709,7 +727,14 @@
           <span class="mn-target" id="mn-ext-target">—</span>
           <span class="mn-v mn-ms" id="mn-ext-ms">— ms</span>
         </div>
+        <div class="mn-kv-row ping">
+          <span class="mn-k">DNS</span>
+          <span class="mn-target" id="mn-dns-target">—</span>
+          <span class="mn-v mn-ms" id="mn-dns-ms">— ms</span>
+        </div>
       </div>
+      <div class="mn-col-sub">STORAGE</div>
+      <div class="mn-rows mn-disk-rows" id="mn-disk-rows"></div>
     </section>
 
     <section class="mn-col mn-ctr-col" id="mn-ctr-col">

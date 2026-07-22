@@ -1846,6 +1846,33 @@
 }
 .mn-ms { text-align: right; font-weight: 600; }
 
+/* Storage sub-section — fills out the network column */
+.mn-col-sub {
+  color: var(--dim); font-weight: 600; letter-spacing: 1.5px;
+  text-transform: uppercase; font-size: clamp(9px, 1.3vh, 12px);
+  border-bottom: 1px solid var(--dim-2);
+  padding-bottom: 2px; margin-top: clamp(5px, 1.4vh, 12px);
+}
+.mn-disk-rows {
+  display: flex; flex-direction: column;
+  flex: 1 1 auto; min-height: 0; overflow: hidden;
+  padding-top: 2px;
+}
+.mn-disk-row {
+  display: grid;
+  grid-template-columns: 1fr auto 40px;
+  gap: 8px; align-items: baseline;
+  flex: 1 1 0; min-height: 0;
+  font-size: clamp(11px, 1.6vh, 14px);
+  font-variant-numeric: tabular-nums;
+}
+.mn-disk-row .label {
+  color: var(--fg); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.mn-disk-row .cap { color: var(--dim); text-align: right; font-size: 0.9em; }
+.mn-disk-row .pct { color: var(--fg-bright); font-weight: 600; text-align: right; }
+
 /* Containers table */
 .mn-ctr-rows {
   display: flex; flex-direction: column;

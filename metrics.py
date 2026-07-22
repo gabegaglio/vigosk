@@ -52,6 +52,10 @@ PING_TIMEOUT_S  = 1       # per-ping timeout (-W argument)
 PING_FAIL_VALUE = 100.0   # value pushed into the ring on timeout/error
 PING_SCALE_MS   = 100.0   # spark max — covers normal RTT plus a failure spike
 PING_EXT_TARGET = os.environ.get("PING_EXT", "1.1.1.1").strip() or "1.1.1.1"
+# A *hostname* (not an IP) on purpose: pinging it forces a DNS lookup
+# first, so a failing dns slot while ext (a raw IP) still succeeds
+# isolates a name-resolution problem from a connectivity one.
+PING_DNS_TARGET = os.environ.get("PING_DNS", "google.com").strip() or "google.com"
 
 # ── GPU sampler ──────────────────────────────────────────────────────
 GPU_SAMPLE_MS = 1000      # intel_gpu_top sample interval
@@ -129,6 +133,9 @@ _DEFAULT_CONFIG = {
         # to the env/compiled-in external target.
         "gw":  "",
         "ext": PING_EXT_TARGET,
+        # dns tests name resolution by pinging a hostname; if this fails
+        # while ext (an IP) is up, DNS is broken. Defaults to google.com.
+        "dns": PING_DNS_TARGET,
     },
     "containers": {
         "interval_s":    CONTAINER_DEFAULT_INTERVAL,
@@ -157,6 +164,9 @@ def _sanitize_config(raw: dict) -> dict:
         ext = str(ping.get("ext", "")).strip()
         if _valid_host(ext):
             cfg["ping"]["ext"] = ext
+        dns = str(ping.get("dns", "")).strip()
+        if _valid_host(dns):
+            cfg["ping"]["dns"] = dns
     cont = raw.get("containers")
     if isinstance(cont, dict):
         try:
@@ -333,7 +343,8 @@ def _ping_loop() -> None:
             gw_cfg = (cfg_ping.get("gw") or "").strip()
             gw_ip = gw_cfg if gw_cfg else _gateway_ipv4()
             ext_ip = (cfg_ping.get("ext") or "").strip() or PING_EXT_TARGET
-            for slot, ip in (("gw", gw_ip), ("ext", ext_ip)):
+            dns_host = (cfg_ping.get("dns") or "").strip() or PING_DNS_TARGET
+            for slot, ip in (("gw", gw_ip), ("ext", ext_ip), ("dns", dns_host)):
                 ms = _ping_once(ip) if ip else None
                 spark_v = min(ms if ms is not None else PING_FAIL_VALUE, PING_SCALE_MS)
                 with _LOCK:
@@ -646,6 +657,8 @@ _PING_STATE: dict[str, dict] = {
     "gw":  {"target": None, "ms": None,
             "hist": collections.deque([0.0] * PING_HISTORY, maxlen=PING_HISTORY)},
     "ext": {"target": PING_EXT_TARGET, "ms": None,
+            "hist": collections.deque([0.0] * PING_HISTORY, maxlen=PING_HISTORY)},
+    "dns": {"target": PING_DNS_TARGET, "ms": None,
             "hist": collections.deque([0.0] * PING_HISTORY, maxlen=PING_HISTORY)},
 }
 _GPU_STATE: dict = {

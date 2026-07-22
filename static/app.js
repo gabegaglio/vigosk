@@ -897,6 +897,7 @@ async function refresh() {
       setText(document.getElementById("ping-meta"), "0–" + scale + " ms");
       renderPingSlot("gw",  ping.gw,  scale);
       renderPingSlot("ext", ping.ext, scale);
+      renderPingSlot("dns", ping.dns, scale);
     }
 
     // ── Procs (throttled — heaviest DOM op; frame already advanced
@@ -1180,7 +1181,7 @@ _wireBackBtn("widgets-modal", () => {
 // echoes back (it may drop an invalid host the user typed).
 // ══════════════════════════════════════════════════════════════════
 let _kioskConfig = {
-  ping: { gw: "", ext: "1.1.1.1" },
+  ping: { gw: "", ext: "1.1.1.1", dns: "google.com" },
   containers: { interval_s: 5, max_per_cycle: 8, targets: [] },
 };
 // Working copy for the containers editor (committed on SAVE).
@@ -1209,7 +1210,7 @@ function _modalHide(id) {
 
 function _applyConfig(cfg) {
   if (!cfg || typeof cfg !== "object") return;
-  if (cfg.ping) _kioskConfig.ping = { gw: cfg.ping.gw || "", ext: cfg.ping.ext || "1.1.1.1" };
+  if (cfg.ping) _kioskConfig.ping = { gw: cfg.ping.gw || "", ext: cfg.ping.ext || "1.1.1.1", dns: cfg.ping.dns || "google.com" };
   if (cfg.containers) {
     _kioskConfig.containers = {
       interval_s: cfg.containers.interval_s || 5,
@@ -1244,6 +1245,7 @@ async function saveKioskConfig(patch) {
 function openNetworkModal() {
   document.getElementById("net-gw-input").value  = _kioskConfig.ping.gw || "";
   document.getElementById("net-ext-input").value = _kioskConfig.ping.ext || "";
+  document.getElementById("net-dns-input").value = _kioskConfig.ping.dns || "";
   const msg = document.getElementById("net-msg");
   if (msg) { msg.textContent = ""; msg.className = "kform-msg"; }
   _modalShow("network-modal");
@@ -1257,11 +1259,13 @@ function closeNetworkModal() { _modalHide("network-modal"); }
     e.stopPropagation(); e.preventDefault();
     const gw  = document.getElementById("net-gw-input").value.trim();
     const ext = document.getElementById("net-ext-input").value.trim();
+    const dns = document.getElementById("net-dns-input").value.trim();
     const msg = document.getElementById("net-msg");
     if (gw && !_validHost(gw)) { _formMsg(msg, "Invalid gateway host", true); return; }
     if (!_validHost(ext))      { _formMsg(msg, "Invalid external host", true); return; }
+    if (!_validHost(dns))      { _formMsg(msg, "Invalid DNS test host", true); return; }
     try {
-      await saveKioskConfig({ ping: { gw, ext } });
+      await saveKioskConfig({ ping: { gw, ext, dns } });
       _formMsg(msg, "Saved ✓", false);
     } catch (err) { _formMsg(msg, "Save failed", true); }
   };

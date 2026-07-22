@@ -494,6 +494,15 @@ window.layoutOnTick = function (s, sm) {
                     ping.ext.hist, (ping.ext.scale_ms || (ping.gw && ping.gw.scale_ms) || 100));
       }
     }
+    if (ping.dns) {
+      _gSetText(document.getElementById("g-ping-dns-target"), ping.dns.target || "—");
+      _gSetText(document.getElementById("g-ping-dns-ms"),
+        ping.dns.ms == null ? "↯" : ping.dns.ms.toFixed(1) + " ms");
+      if (renderSpark && Array.isArray(ping.dns.hist)) {
+        renderSpark(document.getElementById("g-ping-dns-spark"),
+                    ping.dns.hist, (ping.dns.scale_ms || (ping.gw && ping.gw.scale_ms) || 100));
+      }
+    }
   }
 
   // Net meta — show "0–N ms" scale for the ping sparks (matches default
@@ -1277,6 +1286,21 @@ function _mnEnsureCtrRows(n) {
   while (root.children.length > n) root.removeChild(root.lastChild);
   return root;
 }
+function _mnEnsureDiskRows(n) {
+  const root = document.getElementById("mn-disk-rows");
+  if (!root) return null;
+  while (root.children.length < n) {
+    const row = document.createElement("div");
+    row.className = "mn-disk-row";
+    const label = document.createElement("span"); label.className = "label";
+    const cap   = document.createElement("span"); cap.className   = "cap";
+    const pct   = document.createElement("span"); pct.className   = "pct";
+    row.append(label, cap, pct);
+    root.appendChild(row);
+  }
+  while (root.children.length > n) root.removeChild(root.lastChild);
+  return root;
+}
 
 function _renderMinimal(s, sm) {
   // ── Vitals ──
@@ -1356,10 +1380,42 @@ function _renderMinimal(s, sm) {
       _mnSetColor(exEl, ping.ext.ms == null ? "var(--crit)"
         : (ping.ext.ms > 60 ? "var(--warn)" : "var(--fg-bright)"));
     }
+    if (ping.dns) {
+      _gSetText(document.getElementById("mn-dns-target"), ping.dns.target || "—");
+      const dnEl = document.getElementById("mn-dns-ms");
+      _gSetText(dnEl, ping.dns.ms == null ? "↯" : ping.dns.ms.toFixed(1) + " ms");
+      _mnSetColor(dnEl, ping.dns.ms == null ? "var(--crit)"
+        : (ping.dns.ms > 60 ? "var(--warn)" : "var(--fg-bright)"));
+    }
   }
   const scale = ping && ping.gw && ping.gw.scale_ms;
   _gSetText(document.getElementById("mn-net-meta"),
     scale ? `0–${scale} ms` : ((wan && wan.iface) ? wan.iface : "—"));
+
+  // ── Storage ledger (fills out the network column) ──
+  // Every mounted filesystem, highest usage first, on the same tabular
+  // grid as the ping rows: label · used/total · percent (coloured).
+  const disks = (Array.isArray(s.disks) && s.disks.length)
+    ? s.disks
+    : (s.disk ? [{ label: "/", total: s.disk.total, used: s.disk.used, percent: s.disk.percent }] : []);
+  const diskRoot = document.getElementById("mn-disk-rows");
+  if (diskRoot) {
+    const sorted = disks.slice().sort((a, b) => (b.percent || 0) - (a.percent || 0));
+    const fit = _mnFitRows(diskRoot, MN_PROC_ROW_PX, MN_PROC_ROW_MIN);
+    const visible = fit > 0 ? Math.min(sorted.length, fit) : sorted.length;
+    _mnEnsureDiskRows(visible);
+    for (let i = 0; i < visible; i++) {
+      const d = sorted[i];
+      const row = diskRoot.children[i];
+      if (row.children[0].textContent !== d.label) {
+        row.children[0].textContent = d.label;
+        row.children[0].title = d.label;
+      }
+      _gSetText(row.children[1], _gFmtBytes(d.used) + " / " + _gFmtBytes(d.total));
+      _gSetText(row.children[2], (d.percent || 0).toFixed(0) + "%");
+      _mnSetColor(row.children[2], _gColorForPct(Math.min(100, d.percent || 0)));
+    }
+  }
 
   // ── Processes ledger ──
   if (Array.isArray(s.procs_top)) {
