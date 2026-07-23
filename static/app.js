@@ -685,6 +685,9 @@ async function refresh() {
   } catch (e) { return; }
 
   try {
+    if (!s || !s.cpu || !s.mem || !s.swap || !s.disk || !s.net) return;
+    const errEl = document.getElementById("__err");
+    if (errEl) errEl.remove();
     if (!coresBuilt) {
       buildCores(s.cpu.count);
       coresBuilt = true;
