@@ -43,6 +43,10 @@ jobs:
             ./ "dist/$name/"
           tar -czf "dist/$name.tar.gz" -C dist "$name"
           ( cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256" )
+          # The agent ships as a single file too, with a checksum that
+          # agent/install.sh verifies before installing it.
+          cp agent/vigosk_agent.py "dist/vigosk-agent-$v.py"
+          ( cd dist && sha256sum "vigosk-agent-$v.py" > "vigosk-agent-$v.py.sha256" )
           ls -la dist/
 
       - name: Create GitHub Release
@@ -55,4 +59,6 @@ jobs:
             --title "vigosk $v" \
             --generate-notes \
             "dist/vigosk-$v.tar.gz" \
-            "dist/vigosk-$v.tar.gz.sha256"
+            "dist/vigosk-$v.tar.gz.sha256" \
+            "dist/vigosk-agent-$v.py" \
+            "dist/vigosk-agent-$v.py.sha256"
