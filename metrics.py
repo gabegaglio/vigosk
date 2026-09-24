@@ -969,7 +969,7 @@ _fleet_mod = _load_module("vigosk_fleet", ROOT / "fleet.py")
 _FLEET_LOCK = threading.Lock()
 _FLEET_LOCAL: dict = {
     "m": None, "sys": None, "procs": None, "guests": None, "seq": 0, "seen": None,
-    "hist": {k: collections.deque(maxlen=FLEET_HIST) for k in ("cpu", "mem", "rx", "tx")},
+    "hist": {k: collections.deque(maxlen=FLEET_HIST) for k in ("t", "cpu", "mem", "rx", "tx")},
 }
 _FLEET_STATE = {"last_req": 0.0, "running": False}
 
@@ -995,6 +995,7 @@ def _fleet_local_loop() -> None:
                 _FLEET_LOCAL["seq"] += 1
                 _FLEET_LOCAL["seen"] = time.time()
                 h = _FLEET_LOCAL["hist"]
+                h["t"].append(round(_FLEET_LOCAL["seen"], 2))
                 h["cpu"].append(round(s["cpu"]["pct"], 1))
                 h["mem"].append(round(s["mem"]["pct"], 1))
                 h["rx"].append(s["net"]["rx"])
@@ -1029,7 +1030,11 @@ def _fleet_payload(with_hist: bool) -> dict:
                 hub["error"] = f"hub returned {st}"
         except Exception as e:
             hub["error"] = f"hub unreachable: {e.__class__.__name__}"
-    return {"hub": hub, "interval": FLEET_INTERVAL, "nodes": ([local] if local else []) + remote}
+    # "now" lets the browser line its clock up with sample timestamps
+    # (all of them come from this machine's clock: local samples and the
+    # hub's receive times), which is what makes the graphs scroll smoothly.
+    return {"hub": hub, "interval": FLEET_INTERVAL, "now": round(time.time(), 3),
+            "nodes": ([local] if local else []) + remote}
 
 
 def _clean_cpu_name(raw: str) -> str:

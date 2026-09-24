@@ -1717,7 +1717,8 @@ function _renderWeatherBanner(s) {
     _gSetText(document.getElementById("hf-wx-temp"), Math.round(wx.temp) + "°");
     const cond = wx.text && wx.text !== "—" ? wx.text : "";
     _gSetText(document.getElementById("hf-wx-text"), wx.label ? (cond ? cond + " · " + wx.label : wx.label) : cond);
-    _gSetText(document.getElementById("hf-wx-meta"), _hubWxMeta(wx).join(" · "));
+    // Banner is one line: keep feels + high/low, leave humidity to the hub layouts.
+    _gSetText(document.getElementById("hf-wx-meta"), _hubWxMeta(wx).filter((x) => !/hum$/.test(x)).join(" · "));
   } else {
     box.hidden = true;
   }

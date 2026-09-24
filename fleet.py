@@ -335,7 +335,10 @@ class Store:
             st = self.nodes[nid] = {
                 "m": None, "sys": None, "procs": None, "guests": None, "seq": 0,
                 "seen": None, "seen_mono": 0.0, "addr": "",
-                "hist": {k: collections.deque(maxlen=HIST_LEN) for k in ("cpu", "mem", "rx", "tx")},
+                # "t" = receive time of each sample, so the dashboard can place
+                # points on a real time axis (gaps stay gaps, graphs scroll
+                # at a constant speed however irregularly samples arrive).
+                "hist": {k: collections.deque(maxlen=HIST_LEN) for k in ("t", "cpu", "mem", "rx", "tx")},
             }
         return st
 
@@ -357,6 +360,7 @@ class Store:
             st["seq"] += 1
             st["seen"], st["seen_mono"], st["addr"] = time.time(), time.monotonic(), addr
             h = st["hist"]
+            h["t"].append(round(st["seen"], 2))
             h["cpu"].append(round(sample["cpu"]["pct"], 1))
             h["mem"].append(round(sample["mem"]["pct"], 1))
             h["rx"].append(round(sample["net"]["rx"]))

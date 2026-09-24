@@ -9,8 +9,8 @@ a Raspberry Pi, a VPS) on the same screen. Press `8` for the **FLEET** layout:
   weighted by core count, total memory, total network traffic, running
   Proxmox guests, and the one thing most worth a look (an offline machine, a
   nearly full disk, a hot CPU).
-- **One column per machine:** CPU and memory as big numbers with history
-  graphs, the two fullest disks, network, disk I/O and load. Every graph uses
+- **One column per machine:** CPU and memory as big numbers with smoothly
+  scrolling history graphs, the two fullest disks, network, disk I/O and load. Every graph uses
   the same 0–100 % scale and time window, so you compare machines by reading
   straight across.
 - **Five or more machines** switch to a compact list (one row per machine).
@@ -401,7 +401,11 @@ the latest sample and 6 minutes of history per machine in memory. The dashboard
 (`metrics.py`) serves `GET /api/fleet`: this machine, measured by the **same**
 collector code the agents run (so every row means the same thing), merged with
 the hub's nodes, read over the hub's Unix socket. The browser polls it once a
-second, and only while the FLEET layout is on screen. The other layouts pay
+second, and only while a fleet layout is on screen. Graphs (line mode) put
+every sample on a real time axis and glide left at one constant speed, drawn
+4 seconds behind live, so new points always arrive before they scroll into
+view: the motion stays smooth however irregularly samples arrive. It's a
+compositor animation, so it costs no per-frame JavaScript. The other layouts pay
 nothing, and the local collector parks itself after 60 s without a viewer.
 
 **Design choices**

@@ -147,30 +147,157 @@
   const live = (n) => n.m && (n.status === "online" || n.status === "stale");
 
   // ── history ──────────────────────────────────────────────────────
+  // Clock alignment: sample timestamps come from the dashboard machine's
+  // clock; the API reports that clock as `now`, so we track the offset.
+  let clockOff = null;            // server clock − browser clock (s)
+  let sampleIv = 2;               // expected seconds between samples
+  const serverNow = () => Date.now() / 1000 + (clockOff || 0);
+
   function ingest(nodes, withHist) {
     const seen = new Set();
     for (const n of nodes) {
       seen.add(n.id);
       let h = hist.get(n.id);
       if (!h || (withHist && n.hist)) {
-        h = { seq: n.seq || 0, cpu: [], mem: [] };
-        if (n.hist) { h.cpu = n.hist.cpu.slice(-HIST_MAX); h.mem = n.hist.mem.slice(-HIST_MAX); }
+        h = { seq: n.seq || 0, t: [], cpu: [], mem: [] };
+        if (n.hist) {
+          h.cpu = n.hist.cpu.slice(-HIST_MAX); h.mem = n.hist.mem.slice(-HIST_MAX);
+          if (Array.isArray(n.hist.t) && n.hist.t.length === n.hist.cpu.length) h.t = n.hist.t.slice(-HIST_MAX);
+          else { const end = n.seen || serverNow(); h.t = h.cpu.map((_, k) => end - (h.cpu.length - 1 - k) * sampleIv); }
+        }
         hist.set(n.id, h);
         continue;
       }
       if (n.m && n.seq > h.seq) {
         if (n.seq - h.seq > 3) seeded = false;          // missed a lot (tab hidden) → reseed next poll
-        h.cpu.push(n.m.cpu.pct); h.mem.push(n.m.mem.pct);
-        if (h.cpu.length > HIST_MAX) { h.cpu.shift(); h.mem.shift(); }
+        h.t.push(n.seen || serverNow()); h.cpu.push(n.m.cpu.pct); h.mem.push(n.m.mem.pct);
+        if (h.cpu.length > HIST_MAX) { h.t.shift(); h.cpu.shift(); h.mem.shift(); }
         h.seq = n.seq;
       }
     }
     for (const id of [...hist.keys()]) if (!seen.has(id)) hist.delete(id);
   }
 
+  // Braille mode: the shared text-cell renderer (stepped by nature).
   function spark(elm, data, version) {
     if (!elm || typeof window.__kioskRenderSpark !== "function") return;
     window.__kioskRenderSpark(elm, data && data.length ? data : [0], 100, version);
+  }
+
+  // ── smooth, time-based graphs (line mode) ────────────────────────
+  // Samples arrive every ~2 s but are only *noticed* on the 1 s poll,
+  // so stepping a graph once per update looks like stop-and-go frames.
+  // Instead every point sits on a real time axis and the whole graph
+  // glides left at one constant speed — a compositor animation, so no
+  // per-frame JavaScript — drawn DELAY_S behind "now". Each new point
+  // therefore lands off-screen to the right before it scrolls into view:
+  // the motion never waits and never jumps, however irregularly data
+  // arrives. Values get a light (1,2,1) smoothing and are joined with a
+  // monotone curve, which can't overshoot below 0 % or above 100 %.
+  const SVG = "http://www.w3.org/2000/svg";
+  const WINDOW_S = 120;          // seconds of history across every graph
+  const DELAY_S = 4;             // draw this far behind live
+  const GLIDE_S = 30;            // length of one glide animation
+  const REBUILD_S = 20;          // re-lay the graph at least this often
+  const GAP_S = 15;              // longer silences are drawn as a break
+  const lineMode = () => document.documentElement.getAttribute("data-graph-style") === "line";
+
+  function smoothSeries(v) {
+    const n = v.length;
+    if (n < 3) return v.slice();
+    const o = new Array(n);
+    o[0] = v[0];
+    for (let k = 1; k < n - 1; k++) o[k] = (v[k - 1] + 2 * v[k] + v[k + 1]) / 4;
+    o[n - 1] = (v[n - 2] + 2 * v[n - 1]) / 3;
+    return o;
+  }
+
+  // Monotone cubic (Fritsch–Carlson) through the points, as SVG path data.
+  function monotonePath(xs, ys) {
+    const n = xs.length;
+    let d = "M" + xs[0].toFixed(1) + "," + ys[0].toFixed(1);
+    if (n < 2) return d;
+    const dx = [], sl = [], m = new Array(n);
+    for (let k = 0; k < n - 1; k++) { dx[k] = (xs[k + 1] - xs[k]) || 1e-6; sl[k] = (ys[k + 1] - ys[k]) / dx[k]; }
+    m[0] = sl[0]; m[n - 1] = sl[n - 2];
+    for (let k = 1; k < n - 1; k++) m[k] = sl[k - 1] * sl[k] <= 0 ? 0 : (sl[k - 1] + sl[k]) / 2;
+    for (let k = 0; k < n - 1; k++) {
+      if (sl[k] === 0) { m[k] = 0; m[k + 1] = 0; continue; }
+      const a = m[k] / sl[k], b = m[k + 1] / sl[k], hh = a * a + b * b;
+      if (hh > 9) { const t = 3 / Math.sqrt(hh); m[k] = t * a * sl[k]; m[k + 1] = t * b * sl[k]; }
+    }
+    for (let k = 0; k < n - 1; k++) {
+      const h3 = dx[k] / 3;
+      d += " C" + (xs[k] + h3).toFixed(1) + "," + (ys[k] + m[k] * h3).toFixed(1) +
+           " " + (xs[k + 1] - h3).toFixed(1) + "," + (ys[k + 1] - m[k + 1] * h3).toFixed(1) +
+           " " + xs[k + 1].toFixed(1) + "," + ys[k + 1].toFixed(1);
+    }
+    return d;
+  }
+
+  function smoothSpark(el, h, key) {
+    if (!el || el.offsetParent === null) return;       // hidden (small card / other layout)
+    if (!lineMode()) {
+      if (el._ss) { if (el._ss.anim) el._ss.anim.cancel(); el._ss = null; }
+      spark(el, h ? h[key] : [], h ? h.seq : 0);
+      return;
+    }
+    const W = el.clientWidth, H = el.clientHeight;
+    if (W < 8 || H < 8 || !h || !h.t.length) return;
+    let ss = el._ss;
+    if (ss && !el.contains(ss.svg)) ss = null;         // braille text replaced it
+    const now = serverNow();
+    if (ss && ss.h === h && ss.seq === h.seq && ss.W === W && ss.H === H && now - ss.built < REBUILD_S) return;
+    if (!ss) {
+      el.textContent = "";                              // drop braille text / stepped SVG
+      el._svg = null;
+      const svg = document.createElementNS(SVG, "svg");
+      svg.setAttribute("class", "spark-svg fl-smooth");
+      svg.setAttribute("preserveAspectRatio", "none");
+      const area = document.createElementNS(SVG, "path");
+      area.setAttribute("class", "spark-area");
+      const line = document.createElementNS(SVG, "path");
+      line.setAttribute("class", "spark-line");
+      svg.append(area, line);
+      el.appendChild(svg);
+      ss = el._ss = { svg, area, line, anim: null };
+    }
+    const pps = W / WINDOW_S;                           // pixels per second
+    const left = now - DELAY_S - WINDOW_S;              // time at the left edge, right now
+    const span = W + GLIDE_S * pps;                     // drawing covers the whole glide
+    const ts = h.t, vs = smoothSeries(h[key]);
+    let k0 = 0;
+    while (k0 < ts.length - 1 && ts[k0 + 1] < left) k0++;
+    const segs = [];
+    let cur = [];
+    for (let k = k0; k < ts.length; k++) {
+      if (cur.length && ts[k] - ts[k - 1] > GAP_S) { segs.push(cur); cur = []; }
+      cur.push([(ts[k] - left) * pps, H - 1 - Math.max(0, Math.min(100, vs[k])) / 100 * (H - 2)]);
+    }
+    if (cur.length) {
+      // Hold the last value out to the end of the drawing. With data
+      // flowing it stays off-screen; it only shows if a machine stalls.
+      if (now - ts[ts.length - 1] < GAP_S && cur[cur.length - 1][0] < span) cur.push([span, cur[cur.length - 1][1]]);
+      segs.push(cur);
+    }
+    let lineD = "", areaD = "";
+    for (const sg of segs) {
+      const xs = sg.map((q) => q[0]), ys = sg.map((q) => q[1]);
+      const d = monotonePath(xs, ys);
+      lineD += d + " ";
+      if (sg.length > 1) areaD += d + " L" + xs[xs.length - 1].toFixed(1) + "," + H + " L" + xs[0].toFixed(1) + "," + H + " Z ";
+    }
+    ss.svg.setAttribute("viewBox", "0 0 " + span.toFixed(1) + " " + H);
+    ss.svg.setAttribute("width", span.toFixed(1));
+    ss.svg.setAttribute("height", String(H));
+    ss.svg.style.width = span.toFixed(1) + "px";
+    ss.line.setAttribute("d", lineD);
+    ss.area.setAttribute("d", areaD);
+    if (ss.anim) ss.anim.cancel();
+    ss.anim = ss.svg.animate(
+      [{ transform: "translateX(0px)" }, { transform: "translateX(" + (-GLIDE_S * pps).toFixed(2) + "px)" }],
+      { duration: GLIDE_S * 1000, easing: "linear", fill: "forwards" });
+    Object.assign(ss, { h, seq: h.seq, W, H, built: now });
   }
 
   // ── summary strip ────────────────────────────────────────────────
@@ -281,7 +408,7 @@
     setText(c.name, n.name);
     setText(c.meta, metaLine(n));
     setText(c.state, stateText(n));
-    const h = hist.get(n.id) || { cpu: [], mem: [], seq: 0 };
+    const h = hist.get(n.id) || { t: [], cpu: [], mem: [], seq: 0 };
     if (!m) {
       setText(c.cpu.big, "—"); setText(c.mem.big, "—");
       setText(c.cpu.sub, ""); setText(c.mem.sub, "");
@@ -294,8 +421,8 @@
     setColor(c.cpu.sub, tempColor(m.cpu.temp));
     setText(c.mem.big, m.mem.pct.toFixed(0) + "%"); setColor(c.mem.big, colorFor(m.mem.pct));
     setText(c.mem.sub, fmtBytes(m.mem.used) + " / " + fmtBytes(m.mem.total));
-    spark(c.cpu.sp, h.cpu, h.seq);
-    spark(c.mem.sp, h.mem, h.seq);
+    smoothSpark(c.cpu.sp, h, "cpu");
+    smoothSpark(c.mem.sp, h, "mem");
     const wd = worstDisks(m, 2);
     c.disks.forEach((d, i) => {
       const x = wd[i];
@@ -444,7 +571,7 @@
     setText(c.mc, m.cpu.pct.toFixed(0) + "%"); setColor(c.mc, colorFor(m.cpu.pct));
     setText(c.mm, m.mem.pct.toFixed(0) + "%"); setColor(c.mm, colorFor(m.mem.pct));
     const h = hist.get(n.id);
-    if (h && c.sp.offsetParent !== null) spark(c.sp, h.cpu, h.seq);   // skip hidden (small-card) graphs
+    smoothSpark(c.sp, h, "cpu");
     const d = worstDisks(m, 1)[0];
     c.disk.hidden = !d;
     if (d) {
@@ -668,6 +795,11 @@
       const r = await fetch("api/fleet" + (seeded ? "" : "?hist=1"), { cache: "no-store" });
       const d = await r.json();
       if (!r.ok) { setText($("fl-sum-alert"), d.error || ("fleet API " + r.status)); setColor($("fl-sum-alert"), "var(--crit)"); return; }
+      if (typeof d.now === "number") {
+        const off = d.now - Date.now() / 1000;
+        clockOff = clockOff == null ? off : clockOff + 0.1 * (off - clockOff);
+      }
+      if (d.interval) sampleIv = d.interval;
       const withHist = !seeded;
       seeded = true;                  // ingest() may flip this back to force a reseed
       ingest(d.nodes || [], withHist);
