@@ -274,6 +274,13 @@
       if (cur.length && ts[k] - ts[k - 1] > GAP_S) { segs.push(cur); cur = []; }
       cur.push([(ts[k] - left) * pps, H - 1 - Math.max(0, Math.min(100, vs[k])) / 100 * (H - 2)]);
     }
+    // Less history than the window (machine just added, hub restarted):
+    // extend the oldest value flat to the left edge — the same lead-in
+    // the other vigosk graphs use — so every graph spans its full width.
+    // Flat at the first value, so re-anchoring it on each rebuild is
+    // invisible and the curve's first tangent stays 0.
+    const first = segs.length ? segs[0] : cur;
+    if (first.length && first[0][0] > 0) first.unshift([-2, first[0][1]]);
     if (cur.length) {
       // Hold the last value out to the end of the drawing. With data
       // flowing it stays off-screen; it only shows if a machine stalls.

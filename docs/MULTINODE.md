@@ -249,6 +249,27 @@ A green dot means online. Amber means the machine hasn't reported for a few
 seconds (**stale**). Red means **offline**, and its column stays in place,
 faded, so you notice.
 
+### Services on each machine
+
+The **SVC** item in the hub layouts' footer counts the services on your
+watch-list (OPTIONS → CONTAINERS). On Proxmox each machine's agent also
+reports its containers and VMs, so vigosk knows **which machine runs each
+service**. Once services are spread over several machines the footer shows
+one count per machine (`dev1 8/9 · dev2 2/2`), and tapping it opens one
+column per machine:
+
+- your watched services with their ping time, or **STOPPED** (the container
+  is off) / **NO REPLY** (it's running but doesn't answer, usually an
+  out-of-date IP in the watch-list);
+- other running guests, marked *not watched*;
+- one dim line listing that machine's stopped guests.
+
+Services are matched by **name**, so name each watch-list entry exactly like
+its container / VM hostname. Migrate a container to another node and it
+moves to that node's column by itself. Guest names need the agent's
+`--privileged` mode, or a hub in the same Proxmox cluster, which reads them
+for you.
+
 **More machines:** repeat step 4 for each one. Names are lowercase letters,
 digits, `.`, `_`, `-` (up to 32 characters). Up to 64 machines per hub.
 

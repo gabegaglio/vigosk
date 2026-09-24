@@ -1774,19 +1774,69 @@ function _renderHubVitals(s, sm, p) {
 
 // Container up/down summary (autohides with no targets) — the tappable
 // SVC item in each hub footer / banner. `p` is the id prefix.
+// One watched service's status. `state` (running / stopped) comes from
+// the Proxmox node the service's guest lives on; `up` is this machine's
+// ping. A running guest that doesn't answer is NO REPLY (e.g. a stale IP
+// in the watch-list), not UP.
+function _svcStatus(it) {
+  if (it.state === "stopped") return "down";
+  if (it.up === true) return "up";
+  if (it.up === false) return it.state === "running" ? "noreply" : "down";
+  return it.state === "running" ? "up" : "pending";
+}
+
+// Watched services grouped by the node their guest runs on ("" = not a
+// Proxmox guest, e.g. a router), in name order with "" last.
+function _svcByNode(list) {
+  const groups = new Map();
+  for (const it of list) {
+    const k = it.node || "";
+    if (!groups.has(k)) groups.set(k, { up: 0, down: 0, items: [] });
+    const g = groups.get(k), st = _svcStatus(it);
+    if (st === "up") g.up++;
+    else if (st === "down" || st === "noreply") g.down++;
+    g.items.push(it);
+  }
+  return new Map([...groups.entries()].sort((a, b) =>
+    (a[0] === "") - (b[0] === "") || a[0].localeCompare(b[0])));
+}
+
+// Tappable SVC item in each hub footer / banner (`p` = id prefix). When
+// the watched services are spread over several machines it shows one
+// "node up/total" per machine, each coloured on its own; otherwise the
+// classic "N up · M down".
 function _renderHubSvc(p) {
   const list = _hubContainers;
   const ctrItem = document.getElementById(p + "-ctr-item");
-  if (list.length) {
+  const ctrEl = document.getElementById(p + "-ctr");
+  if (!list.length) { if (ctrItem) ctrItem.hidden = true; return; }
+  if (ctrItem) ctrItem.hidden = false;
+  if (!ctrEl) return;
+  const groups = _svcByNode(list);
+  let parts;
+  if ([...groups.keys()].filter(Boolean).length > 1) {
+    parts = [...groups.entries()].map(([k, g]) => [(k || "other") + " " + g.up + "/" + g.items.length, g.down > 0]);
+  } else {
     let up = 0, down = 0;
-    for (const it of list) { if (it.up === true) up++; else if (it.up === false) down++; }
-    if (ctrItem) ctrItem.hidden = false;
-    const ctrEl = document.getElementById(p + "-ctr");
-    if (ctrEl) {
-      _gSetText(ctrEl, down > 0 ? (up + " up · " + down + " down") : (up + " up"));
-      ctrEl.style.color = down > 0 ? "var(--crit)" : "var(--good)";
+    for (const g of groups.values()) { up += g.up; down += g.down; }
+    parts = [[down > 0 ? up + " up · " + down + " down" : up + " up", down > 0]];
+  }
+  const sig = JSON.stringify(parts);
+  if (ctrEl.dataset.sig === sig) return;
+  ctrEl.dataset.sig = sig;
+  ctrEl.textContent = "";
+  ctrEl.style.color = "";
+  parts.forEach(([txt, bad], k) => {
+    if (k) {
+      const sep = document.createElement("span");
+      sep.className = "svc-sep"; sep.textContent = " · ";
+      ctrEl.appendChild(sep);
     }
-  } else if (ctrItem) ctrItem.hidden = true;
+    const seg = document.createElement("span");
+    seg.textContent = txt;
+    seg.style.color = bad ? "var(--crit)" : "var(--good)";
+    ctrEl.appendChild(seg);
+  });
 }
 
 function _renderHub(s, sm) {
@@ -1808,54 +1858,136 @@ function _renderHub(s, sm) {
 let _hubContainers = [];
 let _svcModalOpen = false;
 
+// Per-node guest inventories from /api/services, polled only while the
+// modal is open.
+let _svcData = null;
+let _svcTimer = null;
+async function _fetchServices() {
+  const m = document.getElementById("services-modal");
+  if (!m || !m.classList.contains("show")) {           // closed (any way) → stop polling
+    _svcModalOpen = false;
+    if (_svcTimer) { clearInterval(_svcTimer); _svcTimer = null; }
+    return;
+  }
+  try {
+    const r = await fetch("api/services", { cache: "no-store" });
+    if (r.ok) { _svcData = await r.json(); if (_svcModalOpen) _renderServicesModal(); }
+  } catch (e) { /* keep the last view */ }
+}
+
+const _SVC_LABEL = { up: "UP", down: "DOWN", noreply: "NO REPLY", pending: "…" };
+function _svcEl(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function _svcRow(state, name, sub, label, extraCls) {
+  const row = _svcEl("div", "svc-row" + (extraCls ? " " + extraCls : ""));
+  const mid = _svcEl("span", "svc-mid");
+  mid.append(_svcEl("span", "svc-name", name), _svcEl("span", "svc-host", sub));
+  row.append(_svcEl("span", "svc-dot " + state), mid, _svcEl("span", "svc-state " + state, label));
+  return row;
+}
+function _svcWatchedRow(it) {
+  const st = _svcStatus(it);
+  let label = _SVC_LABEL[st];
+  if (st === "up" && it.ms != null) label = it.ms.toFixed(1) + " ms";
+  if (st === "down" && it.state === "stopped") label = "STOPPED";
+  const where = it.vmid ? (it.gtype === "vm" ? "VM " : "CT ") + it.vmid : "";
+  return _svcRow(st, it.name || it.host || "—", [where, it.host].filter(Boolean).join(" · "), label);
+}
+const _svcRank = (it) => ({ down: 0, noreply: 1, pending: 2, up: 3 })[_svcStatus(it)];
+const _svcSort = (a, b) => _svcRank(a) - _svcRank(b) || String(a.name || "").localeCompare(String(b.name || ""));
+
 function _renderServicesModal() {
   const listEl = document.getElementById("svc-list");
   const sumEl  = document.getElementById("svc-summary");
+  const modal  = document.getElementById("services-modal");
   if (!listEl) return;
   const items = Array.isArray(_hubContainers) ? _hubContainers : [];
-  let up = 0, down = 0, pend = 0;
-  for (const it of items) {
-    if (it.up === true) up++; else if (it.up === false) down++; else pend++;
-  }
+  const nodes = (_svcData && Array.isArray(_svcData.nodes)) ? _svcData.nodes : [];
+  let up = 0, down = 0;
+  for (const it of items) { const st = _svcStatus(it); if (st === "up") up++; else if (st === "down" || st === "noreply") down++; }
   if (sumEl) {
-    sumEl.innerHTML = items.length
-      ? `<span class="up">${up} up</span><span class="down">${down} down</span>` +
-        `<span class="tot">${items.length} total</span>`
-      : "";
+    sumEl.textContent = "";
+    if (items.length) {
+      sumEl.append(_svcEl("span", "up", up + " up"), _svcEl("span", "down", down + " down"),
+                   _svcEl("span", "tot", items.length + " watched" + (nodes.length > 1 ? " · " + nodes.length + " machines" : "")));
+    }
   }
-  if (!items.length) {
-    listEl.innerHTML = `<div class="svc-empty">No services configured —<br>add them in OPTIONS → CONTAINERS.</div>`;
+  if (modal) modal.classList.toggle("grouped", nodes.length > 0);
+
+  // No Proxmox inventory (not a PVE host, no agents): the flat list.
+  if (!nodes.length) {
+    if (!items.length) {
+      listEl.replaceChildren(_svcEl("div", "svc-empty", "No services configured — add them in OPTIONS → CONTAINERS."));
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    items.slice().sort(_svcSort).forEach((it) => frag.appendChild(_svcWatchedRow(it)));
+    listEl.replaceChildren(frag);
     return;
   }
-  // Sort down-first so problems surface at the top, then by name.
-  const rank = (it) => (it.up === false ? 0 : it.up === true ? 2 : 1);
-  const rows = items.slice().sort((a, b) => rank(a) - rank(b) ||
-    String(a.name || a.host || "").localeCompare(String(b.name || b.host || "")));
-  const frag = document.createDocumentFragment();
-  for (const it of rows) {
-    const state = it.up === true ? "up" : it.up === false ? "down" : "pending";
-    const label = it.up === true ? "UP" : it.up === false ? "DOWN" : "…";
-    const row = document.createElement("div");
-    row.className = "svc-row";
-    const dot = document.createElement("span"); dot.className = "svc-dot " + state;
-    const mid = document.createElement("span");
-    const nm = document.createElement("span"); nm.className = "svc-name"; nm.textContent = it.name || it.host || "—";
-    const hs = document.createElement("span"); hs.className = "svc-host"; hs.textContent = "  " + (it.host || "");
-    mid.append(nm, hs);
-    const st = document.createElement("span"); st.className = "svc-state " + state; st.textContent = label;
-    row.append(dot, mid, st);
-    frag.appendChild(row);
+
+  // One column per machine: its watched services (ping + guest state),
+  // then any other running guests, then a single line of stopped ones.
+  const groups = _svcByNode(items);
+  const grid = _svcEl("div", "svc-nodes");
+  for (const nd of nodes) {
+    const col = _svcEl("section", "svc-node");
+    col.dataset.status = nd.status || "online";
+    const g = groups.get(nd.name) || { up: 0, down: 0, items: [] };
+    const head = _svcEl("div", "svc-node-head");
+    head.append(_svcEl("span", "svc-dot " + (nd.status === "offline" ? "down" : g.down ? "noreply" : "up")),
+                _svcEl("span", "svc-node-name", String(nd.name || "?").toUpperCase()));
+    if (nd.role === "hub") head.append(_svcEl("span", "fl-tag", "HUB"));
+    const meta = _svcEl("span", "svc-node-meta",
+      nd.status === "offline" ? "offline · last known"
+        : (g.items.length ? g.up + "/" + g.items.length + " up" : "no watched services"));
+    if (g.down) meta.style.color = "var(--crit)";
+    head.append(meta);
+    col.appendChild(head);
+    const body = _svcEl("div", "svc-node-body");
+    g.items.slice().sort(_svcSort).forEach((it) => body.appendChild(_svcWatchedRow(it)));
+    // Guests on this node that aren't the matched instance of a watched service.
+    const shown = new Set(g.items.map((it) => it.vmid));
+    const others = (nd.guests || []).filter((x) => !x.tpl && !shown.has(x.id));
+    others.filter((x) => x.s === "running").forEach((x) => body.appendChild(
+      _svcRow("up", x.n || ((x.t === "vm" ? "VM " : "CT ") + x.id), (x.t === "vm" ? "VM " : "CT ") + x.id + " · not watched", "RUNNING", "unwatched")));
+    col.appendChild(body);
+    // Busy machines take two grid tracks and flow their rows into two columns.
+    if (body.childElementCount > 6) col.classList.add("wide");
+    const stopped = others.filter((x) => x.s !== "running");
+    if (stopped.length) {
+      col.appendChild(_svcEl("div", "svc-stopped-line",
+        "stopped · " + stopped.map((x) => x.n || ((x.t === "vm" ? "VM " : "CT ") + x.id)).join(" · ")));
+    }
+    grid.appendChild(col);
   }
-  listEl.replaceChildren(frag);
+  const other = groups.get("");
+  if (other && other.items.length) {
+    const col = _svcEl("section", "svc-node");
+    const head = _svcEl("div", "svc-node-head");
+    head.append(_svcEl("span", "svc-dot " + (other.down ? "noreply" : "up")), _svcEl("span", "svc-node-name", "OTHER HOSTS"),
+                _svcEl("span", "svc-node-meta", other.up + "/" + other.items.length + " up"));
+    col.appendChild(head);
+    other.items.slice().sort(_svcSort).forEach((it) => col.appendChild(_svcWatchedRow(it)));
+    grid.appendChild(col);
+  }
+  listEl.replaceChildren(grid);
 }
 
 function _openServicesModal() {
   _svcModalOpen = true;
   _renderServicesModal();
   if (typeof _modalShow === "function") _modalShow("services-modal");
+  _fetchServices();
+  if (!_svcTimer) _svcTimer = setInterval(_fetchServices, 3000);
 }
 function _closeServicesModal() {
   _svcModalOpen = false;
+  if (_svcTimer) { clearInterval(_svcTimer); _svcTimer = null; }
   if (typeof _modalHide === "function") _modalHide("services-modal");
 }
 

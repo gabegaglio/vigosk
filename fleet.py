@@ -54,7 +54,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-HUB_VERSION = "0.2.0"
+HUB_VERSION = "0.2.1"
 SCHEMA = 1
 
 DEFAULT_STATE = os.environ.get("VIGOSK_HUB_STATE", "") or os.environ.get("STATE_DIRECTORY", "") or "/var/lib/vigosk-hub"
@@ -200,6 +200,19 @@ def sanitize_sample(o):
     if "guests" in o:
         g = _dict(o.get("guests"))
         out["guests"] = {"ct": _int(g.get("ct"), 0, 10**5) or 0, "vm": _int(g.get("vm"), 0, 10**5) or 0}
+        if "list" in g:                              # Proxmox guest inventory (agent ≥ 0.2.1)
+            inv = []
+            for x in _list(g.get("list"), 256):
+                x = _dict(x)
+                gid = _int(x.get("id"), 1, 999999999)
+                if not gid:
+                    continue
+                item = {"id": gid, "t": "vm" if x.get("t") == "vm" else "ct",
+                        "n": _str(x.get("n"), 64), "s": "running" if x.get("s") == "running" else "stopped"}
+                if x.get("tpl") is True:
+                    item["tpl"] = True
+                inv.append(item)
+            out["guests"]["list"] = inv
     if "sys" in o:
         s = _dict(o.get("sys"))
         out["sys"] = {

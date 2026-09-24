@@ -46,7 +46,7 @@ import sys
 import time
 from urllib.parse import urlsplit
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 SCHEMA = 1                      # payload schema version understood by the hub
 
 DEFAULT_INTERVAL = 2.0          # seconds between pushes (hub may override)
@@ -339,6 +339,7 @@ class Collector:
         """Top processes by CPU since the last scan + running-guest counts."""
         cur, rows, n = {}, [], 0
         lxc = kvm = 0
+        run_ct, run_vm = set(), set()
         dt = (now - self._proc_t_prev) if self._proc_t_prev else None
         for pid in os.listdir("/proc"):
             if not pid.isdigit():
@@ -363,8 +364,16 @@ class Collector:
             cur[ipid] = ticks
             if name == "lxc-start":
                 lxc += 1
+                if self.is_pve:
+                    gid = _guest_id_from_cmdline(pid, "-n")
+                    if gid is not None:
+                        run_ct.add(gid)
             elif name == "kvm" or name.startswith("qemu-system"):
                 kvm += 1
+                if self.is_pve:
+                    gid = _guest_id_from_cmdline(pid, "-id")
+                    if gid is not None:
+                        run_vm.add(gid)
             prev = self._proc_prev.get(ipid)
             if dt and prev is not None:
                 cpu = 100.0 * (ticks - prev) / self.clk_tck / dt
@@ -375,7 +384,12 @@ class Collector:
                       "mem": round(100.0 * r / mem_total, 1) if mem_total else 0.0}
                      for c, r, p, nm in rows[:TOP_N]]
         self._nprocs = n
-        self._guests = {"ct": lxc, "vm": kvm} if self.is_pve else None
+        self._guests = None
+        if self.is_pve:
+            self._guests = {"ct": lxc, "vm": kvm}
+            inv = pve_guest_inventory(run_ct, run_vm)
+            if inv is not None:
+                self._guests["list"] = inv
 
     # ── public: one sample ──────────────────────────────────────
     def sample(self):
@@ -448,6 +462,90 @@ class Collector:
                 out["guests"] = self._guests
         self._n += 1
         return out
+
+
+# ── Proxmox guest inventory ─────────────────────────────────────────
+# Which containers / VMs live on this node and whether they're running.
+# Running state comes from the process table (`lxc-start … -n <id>`,
+# `kvm -id <id>`); the guest list and names come from this node's
+# folder in the Proxmox cluster filesystem. Listing guest IDs works for
+# any user; reading names needs root (the privileged agent, or the hub
+# machine for its cluster peers), otherwise names are left blank.
+PVE_NODES_DIR = "/etc/pve/nodes"
+MAX_GUESTS = 256
+
+
+def _guest_id_from_cmdline(pid, flag):
+    try:
+        args = _read(f"/proc/{pid}/cmdline", 8192).split("\0")
+    except OSError:
+        return None
+    for k, a in enumerate(args[:-1]):
+        if a == flag and args[k + 1].isdigit():
+            return int(args[k + 1])
+    return None
+
+
+def pve_node_name():
+    return os.uname().nodename.split(".")[0]
+
+
+def pve_guest_inventory(running_ct, running_vm, node=None):
+    """[{id, t: ct|vm, n: name, s: running|stopped, tpl?}] for this node, or None off-Proxmox."""
+    base = os.path.join(PVE_NODES_DIR, node or pve_node_name())
+    if not os.path.isdir(base):
+        return None
+    out = []
+    for sub, kind, key in (("lxc", "ct", "hostname"), ("qemu-server", "vm", "name")):
+        folder = os.path.join(base, sub)
+        try:
+            files = os.listdir(folder)
+        except OSError:
+            continue
+        for fn in files:
+            if not fn.endswith(".conf") or not fn[:-5].isdigit():
+                continue
+            gid, name, tpl = int(fn[:-5]), "", False
+            try:
+                for line in _read(os.path.join(folder, fn), 64 * 1024).splitlines():
+                    if line.startswith("["):          # snapshot sections follow
+                        break
+                    if line.startswith(key + ":"):
+                        name = line.split(":", 1)[1].strip()
+                    elif line.startswith("template:"):
+                        tpl = line.split(":", 1)[1].strip() == "1"
+            except OSError:
+                pass                                   # unprivileged: IDs only
+            g = {"id": gid, "t": kind, "n": name[:64],
+                 "s": "running" if gid in (running_ct if kind == "ct" else running_vm) else "stopped"}
+            if tpl:
+                g["tpl"] = True
+            out.append(g)
+    out.sort(key=lambda g: g["id"])
+    return out[:MAX_GUESTS]
+
+
+def pve_guests():
+    """Stand-alone inventory (scans only guest processes) — used by the dashboard."""
+    if not os.path.isdir(PVE_NODES_DIR):
+        return None
+    ct, vm = set(), set()
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            comm = _read(f"/proc/{pid}/comm", 64).strip()
+        except OSError:
+            continue
+        if comm == "lxc-start":
+            gid = _guest_id_from_cmdline(pid, "-n")
+            if gid is not None:
+                ct.add(gid)
+        elif comm == "kvm" or comm.startswith("qemu-system"):
+            gid = _guest_id_from_cmdline(pid, "-id")
+            if gid is not None:
+                vm.add(gid)
+    return pve_guest_inventory(ct, vm)
 
 
 def _clean_cpu_name(raw):

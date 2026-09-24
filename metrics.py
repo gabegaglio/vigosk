@@ -1037,6 +1037,85 @@ def _fleet_payload(with_hist: bool) -> dict:
             "nodes": ([local] if local else []) + remote}
 
 
+# ── Services across nodes ────────────────────────────────────────────
+# The container watch-list is pinged from this machine, but on a
+# multi-node Proxmox setup the guests behind it live on different nodes
+# and move between them. Every SERVICES_PERIOD this loop collects each
+# node's guest inventory (this node directly, the others from their
+# agents via the hub), and indexes it by guest name. The watch-list then
+# matches entries *by name* to the node that actually runs that guest,
+# so a migrated container follows its new node automatically instead of
+# going stale. Off Proxmox and without a hub this is a cheap no-op.
+SERVICES_PERIOD = 10.0
+_SVC_LOCK = threading.Lock()
+_SVC_STATE: dict = {"nodes": [], "index": {}, "ts": 0.0}
+_PVE_NODE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.-]{0,63}$")
+
+
+def _pve_name_from_cluster(node: str, kind: str, gid: int) -> str:
+    """A cluster peer's guest name, read from the shared /etc/pve (root only)."""
+    if not _PVE_NODE_RE.match(node or ""):
+        return ""
+    sub, key = ("lxc", "hostname") if kind == "ct" else ("qemu-server", "name")
+    try:
+        with open(f"/etc/pve/nodes/{node}/{sub}/{int(gid)}.conf") as f:
+            for line in f.read(65536).splitlines():
+                if line.startswith("["):
+                    break
+                if line.startswith(key + ":"):
+                    return line.split(":", 1)[1].strip()[:64]
+    except (OSError, ValueError):
+        pass
+    return ""
+
+
+def _services_loop() -> None:
+    while True:
+        try:
+            nodes = []
+            local = _agent_mod.pve_guests() if _agent_mod is not None else None
+            if local is not None:
+                nodes.append({"name": os.uname().nodename.split(".")[0][:32], "role": "hub",
+                              "status": "online", "guests": local})
+            if _fleet_mod is not None and os.path.exists(HUB_SOCKET):
+                try:
+                    st, r = _fleet_mod.control("GET", "/v1/fleet", sock=HUB_SOCKET, timeout=1.0)
+                except Exception:
+                    st, r = 0, {}
+                for n in (r.get("nodes") or []) if st == 200 else []:
+                    inv = (n.get("guests") or {}).get("list")
+                    if inv is None:
+                        continue
+                    peer = ((n.get("sys") or {}).get("host") or n.get("name") or "").split(".")[0]
+                    for g in inv:
+                        if not g.get("n"):
+                            g["n"] = _pve_name_from_cluster(peer, g.get("t"), g.get("id"))
+                    nodes.append({"name": n.get("name", "?"), "role": "agent",
+                                  "status": n.get("status", "offline"), "guests": inv})
+            index: dict = {}
+            for nd in nodes:
+                live = nd["status"] in ("online", "stale")
+                for g in nd["guests"]:
+                    if g.get("tpl") or not g.get("n"):
+                        continue
+                    cand = {"node": nd["name"], "vmid": g["id"], "gtype": g["t"],
+                            "state": g["s"] if live else "unknown"}
+                    cur = index.get(g["n"].lower())
+                    # Prefer the running copy: a migration leaves a stopped one behind.
+                    if cur is None or (cur["state"] != "running" and cand["state"] == "running"):
+                        index[g["n"].lower()] = cand
+            with _SVC_LOCK:
+                _SVC_STATE.update(nodes=nodes, index=index, ts=time.time())
+        except Exception as e:
+            print(f"[services_loop] {e}", flush=True)
+        time.sleep(SERVICES_PERIOD)
+
+
+def _services_payload() -> dict:
+    with _SVC_LOCK:
+        return {"ts": _SVC_STATE["ts"], "nodes": json.loads(json.dumps(_SVC_STATE["nodes"]))}
+
+
 def _clean_cpu_name(raw: str) -> str:
     """Sanitize a /proc/cpuinfo model string for compact display.
 
@@ -1346,6 +1425,13 @@ def snapshot() -> dict:
             st = _CONTAINER_STATE.get(host)
             if st is not None:
                 cont_list.append(dict(st))
+    # Tag each watched service with the node / guest it matches by name.
+    with _SVC_LOCK:
+        svc_index = _SVC_STATE["index"]
+    for c in cont_list:
+        m = svc_index.get((c.get("name") or "").lower())
+        if m:
+            c.update(m)
     containers = {
         "interval_s":    cont_cfg.get("interval_s", CONTAINER_DEFAULT_INTERVAL),
         "max_per_cycle": cont_cfg.get("max_per_cycle", CONTAINER_DEFAULT_CAP),
@@ -1422,6 +1508,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/fleet":
             self._send_json(200, _fleet_payload("hist=1" in (u.query or "")))
+            return
+        if path == "/api/services":
+            self._send_json(200, _services_payload())
             return
         if path == "/api/stats":
             body = json.dumps(snapshot()).encode()
@@ -1504,6 +1593,7 @@ def main():
     threading.Thread(target=_gpu_loop,  name="gpu-sampler",  daemon=True).start()
     threading.Thread(target=_container_loop, name="container-sampler", daemon=True).start()
     threading.Thread(target=_weather_loop, name="weather-sampler", daemon=True).start()
+    threading.Thread(target=_services_loop, name="services-sampler", daemon=True).start()
     host = os.environ.get("VIGOSK_HOST", "127.0.0.1").strip() or "127.0.0.1"
     try:
         port = int(os.environ.get("VIGOSK_PORT", "8765"))
