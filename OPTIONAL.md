@@ -42,13 +42,28 @@ Nginx terminates the public request and forwards to the local metrics server. No
 
    `proxy_buffering off` keeps the JS sampler responsive; without it, polling responses can stack up in nginx's buffer.
 
-2. **Reload nginx:**
+2. **Allow the hostnames you'll browse with.** The dashboard API only answers
+   requests addressed to an IP or `localhost` (this blocks DNS-rebinding
+   attacks). If you'll open the mirror by *name* — e.g. `http://dev1.lan/kiosk/live/`
+   — add those names to the service:
+
+   ```bash
+   sudo systemctl edit vigosk-metrics
+   # add, then save:
+   #   [Service]
+   #   Environment=VIGOSK_ALLOWED_HOSTS=dev1,dev1.lan
+   sudo systemctl restart vigosk-metrics
+   ```
+
+   Browsing by IP (`http://192.168.1.10/kiosk/live/`, a Tailscale IP) needs no change.
+
+3. **Reload nginx:**
 
    ```bash
    nginx -t && systemctl reload nginx
    ```
 
-3. **Verify** from another device:
+4. **Verify** from another device:
 
    ```
    http://<host-ip-or-tailscale-ip>/kiosk/live/
@@ -58,7 +73,10 @@ Nginx terminates the public request and forwards to the local metrics server. No
 
 ### Notes
 
-- Read-only by design — the metrics server has no write endpoints.
+- **No login.** Anyone who can load this URL can view the dashboard *and* change its runtime settings
+  (ping targets, container watch list, weather location) via `POST /api/config`. Keep it on your LAN /
+  tailnet, and put authentication in front (nginx `auth_basic`, Authelia, Tailscale ACLs) if others share
+  that network. Node management for multi-node is *not* reachable this way — it's root-only on the hub.
 - If you want HTTPS, add a TLS-terminating block at the nginx layer (Let's Encrypt or self-signed); the upstream stays plain HTTP on loopback.
 - If you front this with Tailscale, no port forwarding is needed — clients reach nginx over the tailnet.
 
