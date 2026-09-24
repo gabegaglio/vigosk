@@ -196,20 +196,41 @@
   align-items: center;
 }
 .fl-lhead {
-  flex: 0 0 auto;
+  align-self: end;
   color: var(--dim); font-size: 10px; letter-spacing: 1.5px;
-  padding: 0 4px 4px;
+  padding: 0 4px 3px;
   border-bottom: 1px solid var(--border);
+  white-space: nowrap; overflow: hidden;
 }
 .fl-lhead > :last-child { text-align: right; }
-.fl-lbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; }
-.fl-lbody::-webkit-scrollbar { display: none; }
+/* The body is a grid laid out by fitLedger(): one header row + N rows of
+   --fl-row-h per column, flowing into 2–4 columns when rows would get
+   too small. Everything always fits — no scrolling on a kiosk. */
+.fl-lbody {
+  flex: 1 1 auto; min-height: 0; overflow: hidden;
+  display: grid; grid-auto-flow: column;
+  column-gap: clamp(14px, 2.4vw, 32px);
+}
 .fl-lrow {
-  padding: clamp(3px, 0.9vh, 8px) 4px;
+  padding: 0 4px;
   border-bottom: 1px solid var(--grid);
-  font-size: 12px; cursor: pointer;
+  font-size: clamp(9px, calc(var(--fl-row-h, 26px) * 0.46), 12px);
+  cursor: pointer; min-width: 0;
   -webkit-tap-highlight-color: transparent;
 }
+.fl-lrow .bar { height: clamp(3px, calc(var(--fl-row-h, 26px) * 0.22), 6px); }
+.fl-lrow .fl-lname .fl-name { font-size: clamp(10px, calc(var(--fl-row-h, 26px) * 0.5), 13px); }
+.fl-lrow .fl-dot { width: clamp(5px, calc(var(--fl-row-h, 26px) * 0.28), 8px); height: clamp(5px, calc(var(--fl-row-h, 26px) * 0.28), 8px); }
+/* Two ledger columns: drop NET and LOAD. Three or four: keep only
+   node · CPU · MEM · state. */
+.fl-lbody[data-cols="2"] :is(.fl-lhead, .fl-lrow) {
+  grid-template-columns: minmax(80px, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.5fr) 6ch minmax(0, 1fr);
+}
+.fl-lbody[data-cols="2"] :is(.fl-lhead, .fl-lrow) > :is(:nth-child(5), :nth-child(7)) { display: none; }
+.fl-lbody:is([data-cols="3"], [data-cols="4"]) :is(.fl-lhead, .fl-lrow) {
+  grid-template-columns: minmax(60px, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr);
+}
+.fl-lbody:is([data-cols="3"], [data-cols="4"]) :is(.fl-lhead, .fl-lrow) > :is(:nth-child(4), :nth-child(5), :nth-child(6), :nth-child(7)) { display: none; }
 .fl-lname { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .fl-lname .fl-name { font-size: 13px; }
 .fl-lcell { display: grid; grid-template-columns: minmax(20px, 1fr) auto; gap: 6px; align-items: center; min-width: 0; }
@@ -281,3 +302,247 @@
   .flm-grid { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 520px) { .flm-grid { grid-template-columns: 1fr; } }
+
+
+/* ════════════════════════════════════════════════════════════════
+   HUB · FLEET layout (key 9) — hub clock left, machine cards right,
+   weather · quote · services as a banner along the bottom.
+   ────────────────────────────────────────────────────────────────
+   fleet.js picks the card grid (rows × columns) to fit the space and
+   sets data-density from the machine count, which hands the cards
+   more width as the fleet grows. Each card is a size container and
+   sheds detail as it shrinks: graph → disk/net rows → big numbers
+   (a one-line CPU · MEM readout) → just the name and CPU.
+   ════════════════════════════════════════════════════════════════ */
+[data-layout="hubfleet"] .panels { display: none; }
+[data-layout="hubfleet"] .layout-hubfleet { display: flex; }
+
+.layout-hubfleet {
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: clamp(6px, 1.6vh, 16px);
+  padding: clamp(6px, 1.6vh, 20px) clamp(8px, 1.6vw, 24px) clamp(4px, 1vh, 12px);
+}
+.hf-top {
+  flex: 1 1 auto; min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: clamp(12px, 2.4vw, 36px);
+}
+[data-density="normal"] .hf-top { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+[data-density="dense"]  .hf-top { grid-template-columns: minmax(0, 0.62fr) minmax(0, 1.38fr); }
+[data-density="tight"]  .hf-top { grid-template-columns: minmax(0, 0.48fr) minmax(0, 1.52fr); }
+
+/* Clock column — the hub clock, scaled to whatever width it's given. */
+.hf-main {
+  container-type: inline-size;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: clamp(2px, 0.8vh, 8px);
+  min-width: 0; min-height: 0;
+  text-align: center;
+}
+.layout-hubfleet .hub-time { font-size: clamp(48px, min(26vh, 23cqw), 300px); letter-spacing: -3px; }
+.layout-hubfleet .hub-greeting { font-size: clamp(10px, min(2.6vh, 3.2cqw), 20px); }
+.layout-hubfleet .hub-date { font-size: clamp(11px, min(3vh, 3.8cqw), 24px); }
+.hf-fleet-line {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
+  column-gap: 8px; row-gap: 2px;
+  margin-top: clamp(4px, 1.4vh, 14px);
+  color: var(--fg);
+  font-size: clamp(11px, min(1.9vh, 3cqw), 15px);
+  font-variant-numeric: tabular-nums;
+}
+.hf-fleet-line .fl-dot { align-self: center; }
+.hf-fleet-line .hf-k { margin-left: 6px; }
+.hf-f-alert { flex-basis: 100%; font-size: 0.92em; }
+.hf-f-alert:empty { display: none; }
+.hf-k { color: var(--dim); font-size: 0.8em; font-weight: 700; letter-spacing: 1.5px; }
+
+/* Card grid — rows/columns/gap are set by fitCards() in fleet.js. */
+.hf-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0; min-height: 0;
+}
+.hf-card {
+  container-type: size;
+  min-width: 0; min-height: 0;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  gap: clamp(2px, 0.8vh, 7px);
+  padding: clamp(5px, 1.3vh, 13px) clamp(7px, 1.1vw, 16px);
+  background: var(--panel, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--dim-2);
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.hf-card:active { border-color: var(--accent-3); }
+.hf-card[data-status="offline"] { border-color: var(--crit); }
+.hf-card[data-status="stale"]   { border-color: var(--warn); }
+.hf-card:is([data-status="offline"], [data-status="pending"]) :is(.hf-vitals, .hf-spark, .hf-rows, .hf-mini) { display: none !important; }
+/* An offline / never-seen machine says so plainly, at every card size. */
+.hf-off {
+  display: none;
+  flex: 1 1 auto; align-items: center; justify-content: center;
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 700; letter-spacing: 2px;
+  font-size: clamp(9px, min(14cqh, 8cqw), 16px);
+  color: var(--dim);
+}
+.hf-card[data-status="offline"] .hf-off { display: flex; color: var(--crit); }
+.hf-card[data-status="pending"] .hf-off { display: flex; }
+
+.hf-card-head { display: flex; align-items: center; gap: 6px; white-space: nowrap; min-width: 0; flex: 0 0 auto; }
+.hf-name {
+  flex: 0 1 auto; min-width: 3ch;
+  overflow: hidden; text-overflow: ellipsis;
+  color: var(--fg-bright); font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  font-size: clamp(10px, min(10cqh, 7.5cqw), 18px);
+}
+.hf-card .fl-tag { font-size: clamp(7px, 6cqh, 9px); }
+.hf-state {
+  margin-left: auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+  color: var(--dim);
+  font-size: clamp(8px, min(7cqh, 5.5cqw), 12px);
+  font-variant-numeric: tabular-nums;
+}
+.hf-card[data-status="stale"]   .hf-state { color: var(--warn); }
+.hf-card[data-status="offline"] .hf-state { color: var(--crit); font-weight: 700; }
+
+.hf-vitals {
+  flex: 0 0 auto;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: clamp(8px, 6cqw, 22px);
+}
+.hf-vital { display: flex; flex-direction: column; gap: clamp(1px, 1.2cqh, 4px); min-width: 0; }
+.hf-vital .hf-k { font-size: clamp(8px, 6cqh, 11px); }
+.hf-big {
+  color: var(--fg-bright); font-weight: 700; line-height: 1;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(14px, min(20cqh, 14cqw), 48px);
+}
+.hf-card .bar { height: clamp(3px, 2.4cqh, 6px); }
+.hf-card .bar > .fill { box-shadow: none; }
+
+.layout-hubfleet .braille.hf-spark {
+  flex: 1 1 auto;
+  min-height: 0; height: auto;
+  font-size: clamp(8px, 6cqh, 13px);
+  letter-spacing: -1px;
+  text-shadow: none;
+}
+
+.hf-rows {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; gap: clamp(2px, 1cqh, 5px);
+  font-size: clamp(9px, min(7cqh, 5cqw), 12px);
+}
+.hf-row { display: grid; align-items: center; gap: 6px; min-width: 0; }
+.hf-disk { grid-template-columns: minmax(36px, 40%) minmax(0, 1fr) auto; }
+.hf-rk { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hf-rv { font-variant-numeric: tabular-nums; }
+.hf-info { grid-template-columns: minmax(0, 1fr) auto; }
+.hf-net { color: var(--fg); white-space: pre; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.hf-temp { font-variant-numeric: tabular-nums; }
+
+/* One-line readout used by small cards. */
+.hf-mini {
+  display: none;
+  align-items: baseline; gap: 6px;
+  white-space: nowrap; overflow: hidden;
+  font-variant-numeric: tabular-nums; font-weight: 700;
+  color: var(--fg-bright);
+  font-size: clamp(10px, min(30cqh, 9cqw), 18px);
+}
+.hf-mini .hf-k { font-size: 0.62em; }
+
+/* ── Card detail tiers (container = the card) ── */
+/* (specific enough to beat line-graph mode's `[data-graph-style] .braille { display: flex }`) */
+@container (max-height: 124px) { .hf-card .braille.hf-spark { display: none; } }
+@container (max-height: 100px) { .hf-rows { display: none; } }
+@container (max-height: 70px) {
+  .hf-vitals { display: none; }
+  .hf-mini { display: flex; }
+  .hf-card-head { flex: 1 1 auto; }
+}
+@container (max-height: 40px) {
+  .hf-card { flex-direction: row; }
+  .hf-state, .hf-card .fl-tag { display: none; }
+  .hf-mini > :nth-child(n+3) { display: none; }       /* CPU only */
+}
+@container (max-width: 170px) {
+  .hf-mini .hf-k { display: none; }
+  .hf-mini > :nth-child(4)::before { content: "· "; color: var(--dim); font-weight: 400; }
+}
+@container (max-width: 190px) {
+  .hf-state { display: none; }
+  .hf-disk { grid-template-columns: minmax(0, 1fr) auto; }
+  .hf-disk .bar { display: none; }
+  .hf-temp { display: none; }
+}
+
+/* Only the hub so far: an invitation card. */
+.hf-ghost {
+  cursor: default;
+  justify-content: center; align-items: center;
+  text-align: center;
+  background: transparent;
+  border-style: dashed;
+  color: var(--dim);
+}
+.hf-ghost-title { color: var(--fg); font-weight: 700; letter-spacing: 3px; font-size: 12px; }
+.hf-ghost-cmd { color: var(--accent); font-size: 12px; margin-top: 4px; }
+.hf-ghost-sub { font-size: 11px; }
+
+/* ── Bottom banner: weather │ quote of the day │ services ── */
+.hf-banner {
+  flex: 0 0 auto;
+  display: flex; align-items: baseline;
+  gap: clamp(12px, 2.4vw, 32px);
+  padding-top: clamp(5px, 1.2vh, 12px);
+  border-top: 1px solid var(--dim-2);
+  white-space: nowrap;
+  min-width: 0; overflow: hidden;
+  font-size: clamp(11px, 1.9vh, 16px);
+}
+.hf-wx { flex: 0 0 auto; display: inline-flex; align-items: baseline; gap: 8px; }
+.hf-wx-temp { color: var(--fg-bright); font-weight: 700; font-variant-numeric: tabular-nums; font-size: 1.12em; }
+.hf-wx-text { color: var(--fg); font-weight: 600; }
+.hf-wx-meta { color: var(--dim); font-size: 0.86em; font-variant-numeric: tabular-nums; }
+.hf-wx-meta:empty { display: none; }
+.hf-quote {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+  text-align: center;
+}
+.hf-wx:not([hidden]) + .hf-quote { border-left: 1px solid var(--dim-2); padding-left: clamp(12px, 2.4vw, 32px); }
+.hf-quote-text { color: var(--fg-bright); font-style: italic; }
+.hf-quote-author { color: var(--accent-2); font-weight: 600; margin-left: 8px; letter-spacing: 0.5px; }
+.hf-banner .hf-svc { flex: 0 0 auto; margin: 0; }
+.hf-banner .hf-svc .hub-sys-v { font-size: 1em; }
+
+/* Layout-picker preview. */
+.preview-hubfleet { display: flex; flex-direction: column; gap: 4px; padding: 5px; }
+.preview-hubfleet .top { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 5px; }
+.preview-hubfleet .clock { background: var(--dim); border-radius: 2px; margin: 14% 10%; }
+.preview-hubfleet .cards { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 3px; min-height: 0; }
+.preview-hubfleet .card-mini { border: 1px solid var(--dim-2); border-radius: 2px; }
+.preview-hubfleet .strip { height: 4px; background: var(--dim); border-radius: 1px; flex: 0 0 auto; }
+
+/* Phones / narrow remote views: clock above, cards below, banner wraps. */
+@media (max-width: 760px) {
+  .hf-top, [data-density] .hf-top { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .layout-hubfleet .hub-time { font-size: clamp(44px, 16vw, 96px); letter-spacing: -2px; }
+  .layout-hubfleet .hub-secs { font-size: clamp(14px, 5vw, 26px); }
+  .hf-wx { flex-wrap: wrap; }
+  .hf-banner { flex-wrap: wrap; white-space: normal; row-gap: 4px; }
+  .hf-wx:not([hidden]) + .hf-quote { border-left: 0; padding-left: 0; }
+  .hf-quote { text-align: left; }
+}

@@ -76,7 +76,7 @@ usage() {
     G                    line / braille graph mode
     T                    theme picker
     A · D                previous / next theme
-    1 – 8                default · gauges · heatmap · flowstrip · minimal · hub · hub·cards · fleet
+    1 – 9                default · gauges · heatmap · flowstrip · minimal · hub · hub·cards · fleet · hub·fleet
     ?                    show in-app help
 
   https://github.com/gabegaglio/vigosk

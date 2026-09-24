@@ -40,8 +40,8 @@
     <span class="vigosk-help-key">G</span><span class="vigosk-help-desc">line / braille graph mode</span>
     <span class="vigosk-help-key">T</span><span class="vigosk-help-desc">theme picker</span>
     <span class="vigosk-help-key">A · D</span><span class="vigosk-help-desc">previous / next theme</span>
-    <span class="vigosk-help-key">1 – 8</span><span class="vigosk-help-desc">default · gauges · heatmap · flowstrip · minimal · hub · hub·cards · fleet</span>
-    <span class="vigosk-help-key">V</span><span class="vigosk-help-desc">fleet: auto / columns / list view</span>
+    <span class="vigosk-help-key">1 – 9</span><span class="vigosk-help-desc">default · gauges · heatmap · flowstrip · minimal · hub · hub·cards · fleet · hub·fleet</span>
+    <span class="vigosk-help-key">V</span><span class="vigosk-help-desc">fleet layout: auto / columns / list view</span>
     <span class="vigosk-help-key">↑ ↓ ← →</span><span class="vigosk-help-desc">navigate menu actions</span>
     <span class="vigosk-help-key">Enter</span><span class="vigosk-help-desc">activate focused action</span>
     <span class="vigosk-help-key">?</span><span class="vigosk-help-desc">show this help</span>
@@ -946,6 +946,48 @@
     <button class="fl-view-btn" id="fl-view-btn" type="button" title="Switch view: auto · columns · list (V)">AUTO</button>
   </div>
   <div class="fl-grid" id="fl-grid" data-view="columns"></div>
+</div>
+
+<!-- ── HUB · FLEET layout ───────────────────────────────────────────
+     The hub clock on the left, one card per machine on the right (the
+     card grid re-tiles itself as machines are added — static/fleet.js),
+     and weather · quote of the day · services as a banner at the bottom.
+     Clock/greeting/date/quote/weather reuse the hub helpers in layouts.js. -->
+<div class="layout layout-hubfleet" id="layout-hubfleet" data-density="roomy">
+  <div class="hf-top">
+    <div class="hf-main">
+      <div class="hub-greeting" id="hf-greeting">Hello</div>
+      <div class="hub-clock">
+        <span class="hub-time" id="hf-time">--:--</span>
+        <span class="hub-clock-side">
+          <span class="hub-secs" id="hf-secs">00</span>
+          <span class="hub-ampm" id="hf-ampm"></span>
+        </span>
+      </div>
+      <div class="hub-date" id="hf-date">—</div>
+      <div class="hf-fleet-line" data-status="online">
+        <span class="fl-dot" id="hf-f-dot"></span>
+        <span id="hf-f-online">—</span>
+        <span class="hf-k">CPU</span><span id="hf-f-cpu">—</span>
+        <span class="hf-k">MEM</span><span id="hf-f-mem">—</span>
+        <span class="hf-f-alert" id="hf-f-alert"></span>
+      </div>
+    </div>
+    <div class="hf-cards" id="hf-cards"></div>
+  </div>
+  <div class="hf-banner">
+    <span class="hf-wx" id="hf-wx" hidden>
+      <span id="hf-wx-icon">🌡️</span>
+      <span class="hf-wx-temp" id="hf-wx-temp">—°</span>
+      <span class="hf-wx-text" id="hf-wx-text"></span>
+      <span class="hf-wx-meta" id="hf-wx-meta"></span>
+    </span>
+    <span class="hf-quote">
+      <span class="hf-quote-text" id="hf-quote-text">—</span>
+      <span class="hf-quote-author" id="hf-quote-author"></span>
+    </span>
+    <span class="hub-sys-item clickable hf-svc" id="hf-ctr-item" role="button" tabindex="0" title="View service status" hidden><span class="hub-sys-k">SVC</span><span class="hub-sys-v" id="hf-ctr">—</span></span>
+  </div>
 </div>
 
 <!-- Ghost column shown while this machine is the only one on the fleet. -->

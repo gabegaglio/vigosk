@@ -136,7 +136,7 @@ systemctl enable vigosk-agent >/dev/null 2>&1
 systemctl restart vigosk-agent
 sleep 4
 if systemctl is-active --quiet vigosk-agent; then
-  ok "vigosk-agent is running — this machine should now appear on the hub's FLEET layout (key 8)"
+  ok "vigosk-agent is running — this machine should now appear on the hub's FLEET layouts (keys 8 and 9)"
 else
   red "vigosk-agent failed to start. Recent log:"
   journalctl -u vigosk-agent -n 20 --no-pager >&2 || true

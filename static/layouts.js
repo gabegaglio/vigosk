@@ -11,7 +11,7 @@
 // same numbers the user sees on the default panel.
 // ══════════════════════════════════════════════════════════════════
 
-const LAYOUTS = ["default", "gauges", "heatmap", "flowstrip", "minimal", "hub", "hubcards", "fleet"];
+const LAYOUTS = ["default", "gauges", "heatmap", "flowstrip", "minimal", "hub", "hubcards", "fleet", "hubfleet"];
 const LAYOUT_LABELS = {
   default:    "DEFAULT",
   gauges:     "GAUGES",
@@ -21,6 +21,7 @@ const LAYOUT_LABELS = {
   hub:        "HUB",
   hubcards:   "HUB · CARDS",
   fleet:      "FLEET",
+  hubfleet:   "HUB · FLEET",
 };
 const LAYOUT_CHIP = {
   default:    "DFLT",
@@ -31,6 +32,7 @@ const LAYOUT_CHIP = {
   hub:        "HUB",
   hubcards:   "CARD",
   fleet:      "FLT",
+  hubfleet:   "HFLT",
 };
 
 let currentLayout = (() => {
@@ -191,6 +193,24 @@ function buildLayoutSwatch(name) {
     const strip = document.createElement("div");
     strip.className = "strip";
     preview.append(clock, wx, q, strip);
+  } else if (name === "hubfleet") {
+    // Clock block on the left, a 2×2 grid of machine cards on the
+    // right, and the weather / quote banner along the bottom.
+    const top = document.createElement("div");
+    top.className = "top";
+    const clock = document.createElement("div");
+    clock.className = "clock";
+    const cards = document.createElement("div");
+    cards.className = "cards";
+    for (let i = 0; i < 4; i++) {
+      const c = document.createElement("div");
+      c.className = "card-mini";
+      cards.appendChild(c);
+    }
+    top.append(clock, cards);
+    const strip = document.createElement("div");
+    strip.className = "strip";
+    preview.append(top, strip);
   } else if (name === "fleet") {
     // Summary strip over side-by-side machine columns, each with a big
     // number, a spark and a couple of bar rows — the fleet silhouette.
@@ -1623,22 +1643,22 @@ function _hubTickClock() {
   const now = new Date();
   const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
   let h12 = h % 12; if (h12 === 0) h12 = 12;
-  _setAll(["hub-time", "hc-time"], h12 + ":" + String(m).padStart(2, "0"));
-  _setAll(["hub-secs", "hc-secs"], String(s).padStart(2, "0"));
-  _setAll(["hub-ampm", "hc-ampm"], h >= 12 ? "PM" : "AM");
-  _setAll(["hub-greeting", "hc-greeting"], _hubGreeting(h));
+  _setAll(["hub-time", "hc-time", "hf-time"], h12 + ":" + String(m).padStart(2, "0"));
+  _setAll(["hub-secs", "hc-secs", "hf-secs"], String(s).padStart(2, "0"));
+  _setAll(["hub-ampm", "hc-ampm", "hf-ampm"], h >= 12 ? "PM" : "AM");
+  _setAll(["hub-greeting", "hc-greeting", "hf-greeting"], _hubGreeting(h));
   let dateStr = null;
   try {
     dateStr = now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
   } catch (e) { /* locale API missing — leave prior text */ }
-  if (dateStr) _setAll(["hub-date", "hc-date"], dateStr);
+  if (dateStr) _setAll(["hub-date", "hc-date", "hf-date"], dateStr);
   // Roll the quote at local midnight.
   const day = Math.floor(now.getTime() / 86400000);
   if (day !== _hubLastQuoteDay) {
     _hubLastQuoteDay = day;
     const q = _hubQuoteOfDay(now.getTime());
-    _setAll(["hub-quote-text", "hc-quote-text"], "“" + q[0] + "”");
-    _setAll(["hub-quote-author", "hc-quote-author"], "— " + q[1]);
+    _setAll(["hub-quote-text", "hc-quote-text", "hf-quote-text"], "“" + q[0] + "”");
+    _setAll(["hub-quote-author", "hc-quote-author", "hf-quote-author"], "— " + q[1]);
   }
 }
 
@@ -1682,6 +1702,24 @@ function _renderWeatherInline(s) {
     _gSetText(document.getElementById("hub-wx-meta"), _hubWxMeta(wx).join(" · "));
   } else if (line) {
     line.hidden = true;   // off / no location / unavailable → just hide it
+  }
+}
+
+// `hubfleet` layout — weather as the left half of the bottom banner
+// (hidden when weather is off, so the quote gets the whole line).
+function _renderWeatherBanner(s) {
+  const wx = s.weather;
+  const box = document.getElementById("hf-wx");
+  if (!box) return;
+  if (_hubWxReady(wx)) {
+    box.hidden = false;
+    _gSetText(document.getElementById("hf-wx-icon"), wx.icon || "🌡️");
+    _gSetText(document.getElementById("hf-wx-temp"), Math.round(wx.temp) + "°");
+    const cond = wx.text && wx.text !== "—" ? wx.text : "";
+    _gSetText(document.getElementById("hf-wx-text"), wx.label ? (cond ? cond + " · " + wx.label : wx.label) : cond);
+    _gSetText(document.getElementById("hf-wx-meta"), _hubWxMeta(wx).join(" · "));
+  } else {
+    box.hidden = true;
   }
 }
 
@@ -1730,8 +1768,12 @@ function _renderHubVitals(s, sm, p) {
     _gSetText(document.getElementById(p + "-temp"), window.__kioskFmtTemp(t));
   } else if (tempItem) tempItem.hidden = true;
   _gSetText(document.getElementById(p + "-up"), _hubFmtUptime(s.uptime));
+  _renderHubSvc(p);
+}
 
-  // Container up/down summary (autohides with no targets).
+// Container up/down summary (autohides with no targets) — the tappable
+// SVC item in each hub footer / banner. `p` is the id prefix.
+function _renderHubSvc(p) {
   const list = _hubContainers;
   const ctrItem = document.getElementById(p + "-ctr-item");
   if (list.length) {
@@ -1752,6 +1794,8 @@ function _renderHub(s, sm) {
   _renderWeatherCard(s);     // hubcards layout
   _renderHubVitals(s, sm, "hub");
   _renderHubVitals(s, sm, "hc");
+  _renderWeatherBanner(s);   // hubfleet layout
+  _renderHubSvc("hf");
   // Keep the services modal live while it's open.
   if (_svcModalOpen) _renderServicesModal();
 }
@@ -1816,7 +1860,7 @@ function _closeServicesModal() {
 
 (function _wireServicesModal() {
   // Both hub layouts expose a tappable SVC footer item.
-  for (const id of ["hub-ctr-item", "hc-ctr-item"]) {
+  for (const id of ["hub-ctr-item", "hc-ctr-item", "hf-ctr-item"]) {
     const openItem = document.getElementById(id);
     if (openItem) {
       openItem.addEventListener("click", (e) => { e.stopPropagation(); _openServicesModal(); });
@@ -3064,6 +3108,7 @@ window.addEventListener("keydown", (e) => {
     case "6": e.preventDefault(); applyLayout("hub");       break;
     case "7": e.preventDefault(); applyLayout("hubcards");  break;
     case "8": e.preventDefault(); applyLayout("fleet");     break;
+    case "9": e.preventDefault(); applyLayout("hubfleet");  break;
     case "v":
       if (currentLayout === "fleet" && typeof window.__kioskFleetCycleView === "function") {
         e.preventDefault(); window.__kioskFleetCycleView();
