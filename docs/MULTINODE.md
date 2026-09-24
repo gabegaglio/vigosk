@@ -14,11 +14,21 @@ a Raspberry Pi, a VPS) on the same screen. Press `8` for the **FLEET** layout:
   the same 0–100 % scale and time window, so you compare machines by reading
   straight across.
 - **Five or more machines** switch to a compact list (one row per machine).
-  Press `V` or tap the `AUTO` chip to pick columns or list yourself.
+  Press `V` or tap the `AUTO` chip to pick columns or list yourself. The list
+  shrinks its rows as machines are added and then flows into two, three or
+  four side-by-side columns, so even dozens of machines fit without scrolling.
 - **Tap a machine** for details: every core, every disk, top processes,
   interfaces, uptime and running guests.
 
 ![fleet list view — five or more machines](screenshots/fleet-list.png)
+
+Prefer the clock? Press **`9`** for **HUB · FLEET**: the hub clock on the
+left, one card per machine on the right, and weather · quote of the day ·
+services along the bottom. Adding a machine re-tiles the cards to fit, and
+each card sheds detail as it shrinks, so 2 machines get big cards with
+graphs while 40 get compact `CPU · MEM` tiles.
+
+![hub · fleet — clock and machine cards](screenshots/hub-fleet.png)
 
 ---
 
@@ -223,12 +233,14 @@ You should see:
 
 ## Step 5: Look at it
 
-On the hub's screen press **`8`** (or `Esc` → OPTIONS → LAYOUT → FLEET). The
-new machine appears within a few seconds.
+On the hub's screen press **`8`** for FLEET or **`9`** for HUB · FLEET (or
+`Esc` → OPTIONS → LAYOUT). The new machine appears within a few seconds, and
+the layout re-fits itself to make room.
 
 | Key / action | Does |
 | --- | --- |
-| `8` | FLEET layout |
+| `8` | FLEET layout (columns / list) |
+| `9` | HUB · FLEET layout (clock + machine cards) |
 | `V` (or tap `AUTO`) | cycle view: auto → columns → list |
 | tap a machine | details: cores, disks, top processes, network |
 | `Esc` | close details |

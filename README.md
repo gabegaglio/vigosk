@@ -115,7 +115,7 @@ Some settings are editable live from the kiosk UI and persisted server-side (the
 | `G`       | toggle line / braille graph mode                                |
 | `T`       | theme picker                                                    |
 | `A` · `D` | previous / next theme                                           |
-| `1` – `8` | default · gauges · heatmap · flowstrip · minimal · hub · hub·cards · fleet |
+| `1` – `9` | default · gauges · heatmap · flowstrip · minimal · hub · hub·cards · fleet · hub·fleet |
 | `V`       | FLEET layout: cycle auto / columns / list view                  |
 | `↑ ↓ ← →` | navigate menu actions                                           |
 | `Enter`   | activate focused action                                         |
@@ -138,7 +138,7 @@ sudo vigosk node add nas
 curl -fsSL https://raw.githubusercontent.com/gabegaglio/vigosk/main/agent/install.sh | sh -s -- vgk1.eyJ1…
 ```
 
-Press `8` on the hub. Each machine gets a column (5+ machines switch to a list), with a combined summary on top; tap any machine for cores, disks and top processes. Proxmox users: add `--privileged` to the agent command to also see LVM-thin (`local-lvm`) usage.
+Press `8` on the hub (or `9` for the clock + machine-cards version). Each machine gets a column (5+ machines switch to a list), with a combined summary on top; tap any machine for cores, disks and top processes. Both layouts re-fit themselves as you add machines. Proxmox users: add `--privileged` to the agent command to also see LVM-thin (`local-lvm`) usage.
 
 The step-by-step guide covers firewalls (Proxmox, ufw, firewalld), Tailscale, day-to-day commands, troubleshooting and the security model: **[docs/MULTINODE.md](docs/MULTINODE.md)**.
 
@@ -146,7 +146,7 @@ The step-by-step guide covers firewalls (Proxmox, ufw, firewalld), Tailscale, da
 
 ## Layouts
 
-Eight built-in layouts, switch with `1`–`8` or the picker (`L`).
+Nine built-in layouts, switch with `1`–`9` or the picker (`L`).
 
 **default** — six-row strip: CPU, MEM, GPU, DISK, NET, PING.
 
@@ -170,9 +170,13 @@ Eight built-in layouts, switch with `1`–`8` or the picker (`L`).
 
 **hub · cards** — the same content as two columns: the clock on the left, weather and the quote as cards on the right.
 
-**fleet** — every paired machine on one screen: a combined summary strip over one column per machine (or a list for five or more). See [Multi-node](#multi-node-fleet).
+**fleet** — every paired machine on one screen: a combined summary strip over one column per machine (or a list for five or more). The list shrinks its rows as machines are added and flows into extra columns, so dozens of machines still fit without scrolling. See [Multi-node](#multi-node-fleet).
 
 ![fleet list view](docs/screenshots/fleet-list.png)
+
+**hub · fleet** — the hub clock on the left, a card per machine on the right, and weather · quote of the day · services as a banner along the bottom. Add a machine and the cards re-tile to fit (1 → 3 across → 2×2 → 3×2 → … → 9×5), shedding detail as they shrink: graph, then disk/network rows, then down to a one-line `CPU · MEM` readout. Offline machines turn red and say so at every size.
+
+![hub · fleet layout](docs/screenshots/hub-fleet.png)
 
 Each layout has its own widget config (slots on/off, order). Reset a layout to defaults via the `↻` on its swatch in the picker (`L`), or via the Widgets modal (`W`) for the active layout.
 
