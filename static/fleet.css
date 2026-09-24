@@ -1,0 +1,283 @@
+/* ════════════════════════════════════════════════════════════════
+   FLEET layout — every paired machine on one screen (static/fleet.js)
+   ────────────────────────────────────────────────────────────────
+   Built only from theme tokens (--fg, --dim, --accent, …) so it reads
+   correctly under every theme. No cards, no glows, no tinted fills
+   behind numbers: machines are separated by a single hairline and the
+   rows line up across columns, so the eye compares like with like.
+   Each machine column is a size container, which lets it drop its
+   least-important rows on short panels (1280×400 strips) and restack
+   its vitals when four or more machines share the width.
+   ════════════════════════════════════════════════════════════════ */
+
+[data-layout="fleet"] .panels { display: none; }
+[data-layout="fleet"] .layout-fleet { display: flex; }
+
+.layout-fleet {
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: clamp(4px, 1.4vh, 12px);
+  padding: clamp(4px, 1.2vh, 12px) clamp(6px, 1vw, 16px) clamp(2px, 0.8vh, 8px);
+}
+
+/* ── Summary strip ─────────────────────────────────────────────── */
+.fl-summary {
+  flex: 0 0 auto;
+  display: flex; align-items: baseline;
+  gap: clamp(10px, 1.9vw, 28px);
+  padding-bottom: clamp(4px, 1vh, 8px);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+.fl-sum-title {
+  color: var(--accent); font-weight: 700;
+  font-size: 12px; letter-spacing: 3px;
+}
+.fl-sum-item { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
+.fl-sum-k { color: var(--dim); font-size: 10px; letter-spacing: 1.5px; }
+.fl-sum-v {
+  color: var(--fg-bright); font-weight: 700;
+  font-size: clamp(13px, 3vh, 20px);
+  font-variant-numeric: tabular-nums;
+}
+.fl-sum-net .fl-sum-v { font-size: clamp(12px, 2.4vh, 16px); font-weight: 600; }
+.fl-sum-sub { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+.fl-sum-alert {
+  margin-left: auto;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  font-size: 12px; color: var(--dim);
+}
+.fl-view-btn {
+  flex: 0 0 auto;
+  background: transparent; color: var(--dim);
+  border: 1px solid var(--dim-2); border-radius: 2px;
+  font: inherit; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+  padding: 1px 6px; cursor: pointer;
+  touch-action: manipulation;
+}
+.fl-view-btn:active { transform: scale(0.94); }
+
+/* ── Grid ──────────────────────────────────────────────────────── */
+.fl-grid { flex: 1 1 auto; min-height: 0; min-width: 0; display: grid; }
+.fl-grid[data-view="columns"] {
+  grid-template-columns: repeat(var(--fl-n, 2), minmax(0, 1fr));
+}
+
+/* ── Machine column ────────────────────────────────────────────── */
+.fl-node {
+  container-type: size;
+  min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  gap: clamp(4px, 1.4vh, 12px);
+  padding: 0 clamp(8px, 1.4vw, 20px);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.fl-node:first-child { padding-left: 2px; }
+.fl-node + .fl-node { border-left: 1px solid var(--border); }
+
+.fl-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; }
+.fl-dot {
+  flex: 0 0 auto; align-self: center;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--good);
+}
+[data-status="stale"] .fl-dot   { background: var(--warn); }
+[data-status="offline"] .fl-dot { background: var(--crit); }
+[data-status="pending"] .fl-dot { background: transparent; box-shadow: inset 0 0 0 1px var(--dim); }
+.fl-name {
+  /* The machine name wins the header row: it keeps its full width and
+     only the meta line (flex-basis 0) gives way on narrow columns. */
+  flex: 0 1 auto; min-width: 3ch;
+  color: var(--fg-bright); font-weight: 700;
+  font-size: clamp(13px, 3.2vh, 20px);
+  letter-spacing: 1px; text-transform: uppercase;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.fl-tag {
+  flex: 0 0 auto; align-self: center;
+  color: var(--accent); border: 1px solid var(--accent-3); border-radius: 2px;
+  font-size: 9px; font-weight: 700; letter-spacing: 1.5px; padding: 0 4px;
+}
+.fl-meta {
+  flex: 1 1 0; min-width: 0;
+  color: var(--dim); font-size: 11px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.fl-state { flex: 0 0 auto; color: var(--fg); font-size: 11px; font-variant-numeric: tabular-nums; }
+[data-status="stale"] .fl-state   { color: var(--warn); }
+[data-status="offline"] .fl-state { color: var(--crit); font-weight: 700; }
+[data-status="pending"] .fl-state { color: var(--dim); }
+
+/* Vitals: CPU and MEM side by side, each a label row, a big number
+   and a spark that takes whatever height is left. */
+.fl-vitals {
+  flex: 1 1 auto; min-height: 0;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: clamp(10px, 1.6vw, 24px);
+}
+.fl-vital { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; }
+.fl-vk {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
+  color: var(--dim); font-size: 10px; letter-spacing: 1.5px; white-space: nowrap;
+}
+.fl-vsub {
+  font-size: 11px; letter-spacing: 0;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.fl-vbig {
+  color: var(--fg-bright); font-weight: 700; line-height: 1;
+  font-size: clamp(22px, 13cqh, 54px);
+  font-variant-numeric: tabular-nums;
+  margin: 2px 0 4px;
+}
+.layout-fleet .braille.fl-spark {
+  min-height: 14px; height: 100%;
+  font-size: clamp(10px, 2vh, 14px);
+  letter-spacing: -1px;
+  text-shadow: none;
+}
+
+/* Detail rows: two fullest disks, then net / disk I/O / load. */
+.fl-rows { flex: 0 0 auto; display: flex; flex-direction: column; gap: clamp(2px, 0.7vh, 6px); }
+.fl-row {
+  display: grid; grid-template-columns: minmax(64px, 36%) minmax(0, 1fr) auto;
+  align-items: center; gap: 8px;
+  font-size: 11px; min-width: 0;
+}
+.fl-row.fl-kv { grid-template-columns: minmax(64px, 36%) minmax(0, 1fr); }
+.fl-k { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fl-v { color: var(--fg); white-space: pre; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.fl-row .fl-v { text-align: right; }
+.fl-row.fl-kv .fl-v { text-align: left; }
+.layout-fleet .bar, .fleet-modal .bar { height: 6px; }
+.layout-fleet .bar > .fill, .fleet-modal .bar > .fill { box-shadow: none; }
+
+/* Offline / never-seen machines keep their place but fade their data. */
+.fl-node[data-status="offline"] :is(.fl-vitals, .fl-rows),
+.fl-node[data-status="pending"] :is(.fl-vitals, .fl-rows) { opacity: 0.32; }
+
+/* Short columns (slim strip panels): drop the least important rows. */
+@container (max-height: 250px) { .fl-io { display: none; } }
+@container (max-height: 215px) { .fl-load { display: none; } }
+@container (max-height: 185px) { .fl-disk + .fl-disk { display: none; } }
+/* Narrow columns (4 machines on a small screen): stack CPU over MEM. */
+@container (max-width: 250px) {
+  .fl-vitals { grid-template-columns: 1fr; }
+  .fl-meta { display: none; }
+}
+
+/* Ghost column shown while the hub is the only machine. */
+.fl-node.fl-add {
+  cursor: default;
+  justify-content: center; gap: 10px;
+  margin-left: clamp(8px, 1.4vw, 20px);
+  border: 1px dashed var(--dim-2) !important;
+  border-radius: 3px;
+  padding: 12px clamp(12px, 2vw, 28px);
+  color: var(--dim);
+}
+.fl-add-title { color: var(--fg); font-weight: 700; letter-spacing: 3px; font-size: 12px; }
+.fl-add-steps { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.9; }
+.fl-add code { color: var(--accent); font-family: inherit; }
+.fl-add-state { font-size: 11px; }
+
+/* ── Ledger view (5+ machines) ─────────────────────────────────── */
+.fl-grid[data-view="ledger"] { display: flex; flex-direction: column; }
+.fl-lhead, .fl-lrow {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.3fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1.8fr)
+                         minmax(0, 1.6fr) 7ch 6ch minmax(0, 1.1fr);
+  gap: clamp(8px, 1.3vw, 18px);
+  align-items: center;
+}
+.fl-lhead {
+  flex: 0 0 auto;
+  color: var(--dim); font-size: 10px; letter-spacing: 1.5px;
+  padding: 0 4px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.fl-lhead > :last-child { text-align: right; }
+.fl-lbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+.fl-lbody::-webkit-scrollbar { display: none; }
+.fl-lrow {
+  padding: clamp(3px, 0.9vh, 8px) 4px;
+  border-bottom: 1px solid var(--grid);
+  font-size: 12px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.fl-lname { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fl-lname .fl-name { font-size: 13px; }
+.fl-lcell { display: grid; grid-template-columns: minmax(20px, 1fr) auto; gap: 6px; align-items: center; min-width: 0; }
+.fl-lv { font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 22ch; text-align: right; }
+.fl-lnet, .fl-ltemp, .fl-lload, .fl-lstate {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; color: var(--fg);
+}
+.fl-lstate { color: var(--dim); text-align: right; }
+.fl-lrow[data-status="stale"] .fl-lstate { color: var(--warn); }
+.fl-lrow[data-status="offline"] .fl-lstate { color: var(--crit); font-weight: 700; }
+.fl-lrow:is([data-status="offline"], [data-status="pending"]) > :not(.fl-lname):not(.fl-lstate) { opacity: 0.32; }
+
+/* ── Node detail modal ─────────────────────────────────────────── */
+.fleet-modal .theme-modal-box { width: min(1180px, 96vw); max-width: 96vw; max-height: 94vh; }
+.flm-sub {
+  color: var(--dim); font-size: 11px; text-align: center;
+  margin: -4px 0 12px; overflow-wrap: anywhere;
+}
+.flm-grid {
+  display: grid; grid-template-columns: 1fr 1.2fr 1.2fr 1fr;
+  gap: clamp(12px, 2vw, 24px); text-align: left;
+}
+.flm-sec { min-width: 0; }
+.flm-h {
+  color: var(--dim); font-size: 10px; letter-spacing: 2px;
+  border-bottom: 1px solid var(--border); padding-bottom: 3px; margin-bottom: 6px;
+}
+.flm-cores { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 3px 10px; }
+.flm-core, .flm-disk { display: grid; align-items: center; gap: 6px; font-size: 11px; min-width: 0; }
+.flm-core { grid-template-columns: 3ch minmax(0, 1fr) 4ch; }
+.flm-core .fl-v { text-align: right; }
+.flm-disk { grid-template-columns: minmax(60px, 38%) minmax(0, 1fr) auto; margin-bottom: 5px; }
+.flm-proc {
+  display: grid; grid-template-columns: 7ch minmax(0, 1fr) 5ch 5ch; gap: 6px;
+  font-size: 11px; font-variant-numeric: tabular-nums; color: var(--fg);
+}
+.flm-proc > span:nth-child(n+3) { text-align: right; }
+.flm-proc-head { color: var(--dim); font-size: 10px; letter-spacing: 1px; margin-bottom: 2px; }
+.flm-pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flm-kv { display: grid; grid-template-columns: 9ch minmax(0, 1fr); gap: 6px; font-size: 11px; margin-bottom: 3px; }
+.flm-kv .fl-v { white-space: normal; overflow-wrap: anywhere; }
+
+/* ── Layout-picker preview ─────────────────────────────────────── */
+.preview-fleet { display: flex; flex-direction: column; gap: 4px; padding: 5px; }
+.preview-fleet .strip { height: 4px; background: var(--dim); border-radius: 1px; flex: 0 0 auto; }
+.preview-fleet .nodes { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.preview-fleet .node-mini { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+.preview-fleet .node-mini + .node-mini { border-left: 1px solid var(--dim-2); padding-left: 4px; }
+.preview-fleet .big { width: 45%; height: 7px; background: var(--fg); border-radius: 1px; }
+.preview-fleet .spark { flex: 1 1 auto; min-height: 5px; background: var(--dim-2); border-radius: 1px; }
+.preview-fleet .line { height: 3px; background: var(--dim); border-radius: 1px; }
+.preview-fleet .line.short { width: 60%; }
+
+/* ── Phones / narrow remote views ──────────────────────────────── */
+@media (max-width: 760px) {
+  .fl-summary { flex-wrap: wrap; row-gap: 4px; white-space: normal; }
+  .fl-sum-alert { margin-left: 0; flex-basis: 100%; }
+  .fl-grid[data-view="columns"] {
+    grid-template-columns: 1fr;
+    grid-auto-rows: minmax(270px, 42vh);
+    overflow-y: auto;
+  }
+  .fl-node, .fl-node:first-child { padding: 8px 2px; }
+  .fl-node + .fl-node { border-left: 0; border-top: 1px solid var(--border); }
+  .fl-node.fl-add { margin: 8px 0 0; }
+  .fl-lhead, .fl-lrow { grid-template-columns: minmax(90px, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 0 0 6ch 0 0; }
+  .fl-lhead > :nth-child(4), .fl-lhead > :nth-child(5), .fl-lhead > :nth-child(7), .fl-lhead > :nth-child(8),
+  .fl-lrow > :nth-child(4), .fl-lrow > :nth-child(5), .fl-lrow > :nth-child(7), .fl-lrow > :nth-child(8) { display: none; }
+  .flm-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) { .flm-grid { grid-template-columns: 1fr; } }

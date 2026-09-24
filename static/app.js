@@ -681,6 +681,9 @@ async function refresh() {
   try {
     const r = await fetch("api/stats", { cache: "no-store" });
     s = await r.json();
+    // 403 = the server refused this hostname (DNS-rebinding guard) —
+    // say why instead of leaving a silently blank dashboard.
+    if (r.status === 403) { showErr((s && s.error) || "forbidden"); return; }
     _lastStats = s;
   } catch (e) { return; }
 

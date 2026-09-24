@@ -5,7 +5,7 @@
 
 set -eu
 
-VERSION="0.1.5"
+VERSION="0.2.0"
 PROG="$(basename "$0")"
 
 # Resolve install location: <prefix>/bin/vigosk → <prefix>/share/vigosk
@@ -54,6 +54,11 @@ usage() {
         --no-clear       don't use the terminal alt-screen buffer
         --braille-logo   print the braille V-TERM easter-egg logo and exit
 
+  MULTI-NODE (see docs/MULTINODE.md)
+    sudo vigosk hub enable     let other machines report to this dashboard
+    sudo vigosk node add NAME  pair a machine (prints a one-line install command)
+    vigosk hub status          hub address, fingerprint, node status
+
   DEFAULT
     Starts the server and opens the dashboard in your default browser
     (macOS: `open`, Linux: `xdg-open`). Use --kiosk for the locked-down
@@ -71,12 +76,123 @@ usage() {
     G                    line / braille graph mode
     T                    theme picker
     A · D                previous / next theme
-    1 – 4                default · gauges · heatmap · flowstrip
+    1 – 8                default · gauges · heatmap · flowstrip · minimal · hub · hub·cards · fleet
     ?                    show in-app help
 
   https://github.com/gabegaglio/vigosk
 EOF
 }
+
+# ── Multi-node subcommands ──────────────────────────────────────────
+# `vigosk hub …` turns this machine into a hub other machines report to;
+# `vigosk node …` pairs / lists / removes those machines. See
+# docs/MULTINODE.md. These never start the dashboard itself.
+hub_usage() {
+  cat <<EOF
+  vigosk hub — let other machines report to this dashboard
+
+  USAGE
+    sudo vigosk hub enable [--port PORT] [--listen ADDR] [--advertise URL]
+    sudo vigosk hub disable
+         vigosk hub status
+
+  enable     install + start the vigosk-hub service (TLS on 0.0.0.0:8767)
+             --port PORT      agent port                      [default: 8767]
+             --listen ADDR    bind address, e.g. 100.64.0.1:8767 to accept
+                              agents only over Tailscale      [default: 0.0.0.0:PORT]
+             --advertise URL  address agents should dial, e.g. https://nas.lan:8767
+                              [default: https://<this machine's LAN IP>:PORT]
+  disable    stop the service (paired nodes are kept for next time)
+  status     service state, hub address, certificate fingerprint, nodes
+
+  Then:  sudo vigosk node add <name>
+EOF
+}
+
+hub_cmd() {
+  sub="${1:-status}"; [ $# -gt 0 ] && shift
+  case "$sub" in
+    enable)
+      port=8767; listen=""; advertise=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --port) port="${2:?--port needs a value}"; shift 2 ;;
+          --listen) listen="${2:?--listen needs a value}"; shift 2 ;;
+          --advertise) advertise="${2:?--advertise needs a value}"; shift 2 ;;
+          *) printf 'unknown option: %s\n' "$1" >&2; exit 2 ;;
+        esac
+      done
+      case "$port" in ''|*[!0-9]*) printf '\033[31m✗\033[0m --port must be a number\n' >&2; exit 2 ;; esac
+      [ -n "$listen" ] || listen="0.0.0.0:$port"
+      case "$advertise" in ''|https://*) ;; *) printf '\033[31m✗\033[0m --advertise must start with https://\n' >&2; exit 2 ;; esac
+      [ "$(id -u)" -eq 0 ] || { printf '\033[31m✗\033[0m run as root: sudo vigosk hub enable\n' >&2; exit 1; }
+      command -v systemctl >/dev/null 2>&1 || { printf '\033[31m✗\033[0m systemd is required for the hub service\n' >&2; exit 1; }
+      command -v openssl >/dev/null 2>&1 || { printf '\033[31m✗\033[0m openssl is required once to create the hub certificate (apt install openssl)\n' >&2; exit 1; }
+      # The hub runs as an unprivileged throwaway user — it must be able
+      # to read the install. A per-user install under /root or /home isn't.
+      if ! runuser -u nobody -- test -r "$SHARE/fleet.py" 2>/dev/null; then
+        printf '\033[31m✗\033[0m %s is not readable by unprivileged services.\n' "$SHARE" >&2
+        printf '  Install system-wide first:  curl -fsSL https://raw.githubusercontent.com/gabegaglio/vigosk/main/install.sh | sudo sh\n' >&2
+        exit 1
+      fi
+      unit=/etc/systemd/system/vigosk-hub.service
+      sed -e "s|@SHARE@|$SHARE|g" -e "s|@LISTEN@|$listen|g" -e "s|@ADVERTISE@|$advertise|g" \
+        "$SHARE/systemd/vigosk-hub.service" > "$unit.tmp"
+      chmod 0644 "$unit.tmp"; mv "$unit.tmp" "$unit"
+      systemctl daemon-reload
+      systemctl enable vigosk-hub >/dev/null 2>&1
+      systemctl restart vigosk-hub
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        [ -S /run/vigosk-hub/hub.sock ] && break
+        sleep 0.5
+      done
+      if ! [ -S /run/vigosk-hub/hub.sock ]; then
+        printf '\033[31m✗\033[0m vigosk-hub did not start. Log:\n' >&2
+        journalctl -u vigosk-hub -n 20 --no-pager >&2
+        exit 1
+      fi
+      printf '\033[32m✓\033[0m vigosk hub is running\n\n'
+      python3 "$SHARE/fleet.py" info | sed 's/^/  /'
+      printf '\n  Open TCP %s in this machine'"'"'s firewall for your LAN / tailnet ONLY\n' "$port"
+      printf '  (never forward it from the internet). Then pair a machine:\n\n'
+      printf '      sudo vigosk node add <name>\n\n'
+      ;;
+    disable)
+      [ "$(id -u)" -eq 0 ] || { printf '\033[31m✗\033[0m run as root: sudo vigosk hub disable\n' >&2; exit 1; }
+      systemctl disable --now vigosk-hub 2>/dev/null || true
+      printf '\033[32m✓\033[0m vigosk hub stopped. Paired nodes are kept; `sudo vigosk hub enable` resumes.\n'
+      ;;
+    status)
+      printf 'service   %s\n' "$(systemctl is-active vigosk-hub 2>/dev/null || echo inactive)"
+      if [ -S /run/vigosk-hub/hub.sock ]; then
+        python3 "$SHARE/fleet.py" info && printf '\n' && python3 "$SHARE/fleet.py" node list
+      fi
+      ;;
+    -h|--help|help) hub_usage ;;
+    *) printf 'unknown hub command: %s\n\n' "$sub" >&2; hub_usage >&2; exit 2 ;;
+  esac
+}
+
+case "${1:-}" in
+  hub)  shift; hub_cmd "$@"; exit $? ;;
+  node)
+    shift
+    case "${1:-}" in
+      add|list|remove|rekey) exec python3 "$SHARE/fleet.py" node "$@" ;;
+      *) cat <<EOF
+  vigosk node — pair other machines with this hub (run as root)
+
+    sudo vigosk node add <name>      create a node; prints the one-time command to run on it
+    sudo vigosk node list            status of every node
+    sudo vigosk node remove <name>   revoke a node immediately
+    sudo vigosk node rekey <name>    revoke + print a fresh join command (re-pairing)
+
+    add/rekey accept --url https://HOST:PORT to embed a different hub address
+    (e.g. a Tailscale IP) in the join command.
+EOF
+         [ -z "${1:-}" ] && exit 0 || exit 2 ;;
+    esac ;;
+esac
 
 while [ $# -gt 0 ]; do
   case "$1" in

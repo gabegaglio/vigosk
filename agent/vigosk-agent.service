@@ -1,0 +1,56 @@
+[Unit]
+Description=vigosk metrics agent (pushes to a vigosk hub)
+Documentation=https://github.com/gabegaglio/vigosk/blob/main/docs/MULTINODE.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/vigosk-agent run
+# The pairing file (hub URL, pinned fingerprint, node secret) is root-only
+# on disk; systemd hands a private copy to the sandboxed service.
+LoadCredential=agent.json:/etc/vigosk-agent/agent.json
+Restart=always
+RestartSec=10
+
+# ── Sandbox ────────────────────────────────────────────────────────
+# The agent only reads /proc and /sys and makes one outbound HTTPS
+# connection, so it runs as a throwaway unprivileged user with no
+# capabilities, a read-only view of the system and no device access.
+# (LVM thin-pool usage needs root: see vigosk-agent-privileged.conf.)
+DynamicUser=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+UMask=0077
+
+# ── Resource ceiling ───────────────────────────────────────────────
+# Typical use is far below these; they guarantee the agent can never
+# become the problem on the machine it's watching.
+CPUQuota=10%
+MemoryMax=96M
+TasksMax=16
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

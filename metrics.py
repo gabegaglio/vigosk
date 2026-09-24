@@ -11,6 +11,8 @@ the kiosk doesn't see freezes when something heavy (proc enumeration)
 happens to coincide with a poll.
 """
 import collections
+import importlib.util
+import ipaddress
 import json
 import os
 import re
@@ -38,7 +40,44 @@ STATIC_FILES: dict[str, tuple[Path, str]] = {
     "/static/layouts.css": (STATIC_DIR / "layouts.css", "text/css; charset=utf-8"),
     "/static/app.js":      (STATIC_DIR / "app.js",      "application/javascript; charset=utf-8"),
     "/static/layouts.js":  (STATIC_DIR / "layouts.js",  "application/javascript; charset=utf-8"),
+    "/static/fleet.css":   (STATIC_DIR / "fleet.css",   "text/css; charset=utf-8"),
+    "/static/fleet.js":    (STATIC_DIR / "fleet.js",    "application/javascript; charset=utf-8"),
 }
+
+# ── Browser-facing hardening ─────────────────────────────────────────
+# The dashboard API has no login (it's meant for a kiosk on loopback),
+# so it must not be reachable *through* a browser by other websites:
+#   • DNS rebinding — a hostile page re-points its own hostname at
+#     127.0.0.1 and reads /api/* as "same origin". Rebinding always
+#     arrives with the attacker's hostname in the Host header, so /api/*
+#     only answers to IP-literal hosts, localhost, and any names listed
+#     in VIGOSK_ALLOWED_HOSTS (e.g. "dev1,dev1.lan" behind nginx).
+#   • CSRF — POST /api/config additionally requires a JSON content type
+#     (which cross-site pages can't send without a CORS preflight we
+#     never grant) and a matching Origin when one is present.
+_ALLOWED_HOSTS = {h.strip().lower() for h in os.environ.get("VIGOSK_ALLOWED_HOSTS", "").split(",") if h.strip()}
+_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+
+
+def _host_only(value: str) -> str:
+    h = (value or "").strip().lower()
+    if h.startswith("["):
+        return h[1:].split("]", 1)[0]
+    return h.rsplit(":", 1)[0] if h.count(":") == 1 else h
+
+
+def _host_allowed(value: str) -> bool:
+    host = _host_only(value)
+    if not host:
+        return False
+    if host == "localhost" or host in _ALLOWED_HOSTS:
+        return True
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return False
 
 # ── Sampler cadence ──────────────────────────────────────────────────
 FAST_PERIOD = 0.10        # 10 Hz fast metrics
@@ -899,6 +938,100 @@ def _weather_loop() -> None:
         time.sleep(wait)
 
 
+# ── Multi-node fleet (optional) ──────────────────────────────────────
+# /api/fleet merges this machine with the nodes the vigosk hub (fleet.py,
+# a separate unprivileged service) has received from remote agents.
+# This machine's row is measured by the *same* Collector class the
+# agents run, so every row on the fleet view means exactly the same
+# thing. The local collector is lazy: it starts on the first /api/fleet
+# request and parks itself after FLEET_IDLE_S without one, so users who
+# never open the fleet layout pay nothing for it.
+FLEET_INTERVAL = 2.0
+FLEET_HIST = 180
+FLEET_IDLE_S = 60.0
+HUB_SOCKET = os.environ.get("VIGOSK_HUB_SOCKET", "").strip() or "/run/vigosk-hub/hub.sock"
+
+
+def _load_module(name: str, path: Path):
+    try:
+        spec = importlib.util.spec_from_file_location(name, path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception as e:
+        print(f"[fleet] {path.name} unavailable: {e}", flush=True)
+        return None
+
+
+_agent_mod = _load_module("vigosk_agent", ROOT / "agent" / "vigosk_agent.py")
+_fleet_mod = _load_module("vigosk_fleet", ROOT / "fleet.py")
+
+_FLEET_LOCK = threading.Lock()
+_FLEET_LOCAL: dict = {
+    "m": None, "sys": None, "procs": None, "guests": None, "seq": 0, "seen": None,
+    "hist": {k: collections.deque(maxlen=FLEET_HIST) for k in ("cpu", "mem", "rx", "tx")},
+}
+_FLEET_STATE = {"last_req": 0.0, "running": False}
+
+
+def _fleet_local_loop() -> None:
+    col = _agent_mod.Collector()
+    col.sample()                                    # prime delta counters
+    with _FLEET_LOCK:
+        _FLEET_LOCAL["sys"] = col.sysinfo()
+    while True:
+        time.sleep(FLEET_INTERVAL)
+        with _FLEET_LOCK:
+            if time.monotonic() - _FLEET_STATE["last_req"] > FLEET_IDLE_S:
+                _FLEET_STATE["running"] = False     # park until someone looks again
+                return
+        try:
+            s = col.sample()
+            with _FLEET_LOCK:
+                for k in ("procs", "guests"):
+                    if k in s:
+                        _FLEET_LOCAL[k] = s.pop(k)
+                _FLEET_LOCAL["m"] = s
+                _FLEET_LOCAL["seq"] += 1
+                _FLEET_LOCAL["seen"] = time.time()
+                h = _FLEET_LOCAL["hist"]
+                h["cpu"].append(round(s["cpu"]["pct"], 1))
+                h["mem"].append(round(s["mem"]["pct"], 1))
+                h["rx"].append(s["net"]["rx"])
+                h["tx"].append(s["net"]["tx"])
+        except Exception as e:
+            print(f"[fleet_local] {e}", flush=True)
+
+
+def _fleet_payload(with_hist: bool) -> dict:
+    local = None
+    if _agent_mod is not None:
+        with _FLEET_LOCK:
+            _FLEET_STATE["last_req"] = time.monotonic()
+            if not _FLEET_STATE["running"]:
+                _FLEET_STATE["running"] = True
+                threading.Thread(target=_fleet_local_loop, name="fleet-local", daemon=True).start()
+            local = {k: _FLEET_LOCAL[k] for k in ("m", "sys", "procs", "guests", "seq", "seen")}
+            if with_hist:
+                local["hist"] = {k: list(d) for k, d in _FLEET_LOCAL["hist"].items()}
+        local.update(id="local", name=os.uname().nodename[:32], role="hub", addr="",
+                     age=0.0, status="online" if local["m"] else "pending")
+    hub = {"enabled": False, "error": None}
+    remote: list = []
+    if _fleet_mod is not None and os.path.exists(HUB_SOCKET):
+        try:
+            st, r = _fleet_mod.control("GET", "/v1/fleet?hist=1" if with_hist else "/v1/fleet",
+                                       sock=HUB_SOCKET, timeout=1.0)
+            if st == 200:
+                hub.update(r.get("hub") or {}, enabled=True)
+                remote = r.get("nodes") or []
+            else:
+                hub["error"] = f"hub returned {st}"
+        except Exception as e:
+            hub["error"] = f"hub unreachable: {e.__class__.__name__}"
+    return {"hub": hub, "interval": FLEET_INTERVAL, "nodes": ([local] if local else []) + remote}
+
+
 def _clean_cpu_name(raw: str) -> str:
     """Sanitize a /proc/cpuinfo model string for compact display.
 
@@ -1249,8 +1382,22 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
 
+    def end_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        super().end_headers()
+
+    def _api_guard(self) -> bool:
+        """Refuse /api/* for hostnames we don't know (DNS-rebinding defence)."""
+        if _host_allowed(self.headers.get("Host", "")):
+            return True
+        self._send_json(403, {"error": "vigosk: this hostname is not allowed. Browse via an IP address, "
+                                       "or add the name to VIGOSK_ALLOWED_HOSTS."})
+        return False
+
     def do_GET(self):
-        path = urlsplit(self.path).path
+        u = urlsplit(self.path)
+        path = u.path
         if path in ("/", "/index.html"):
             try:
                 body = INDEX.read_bytes()
@@ -1260,9 +1407,16 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Security-Policy", _CSP)
+            self.send_header("X-Frame-Options", "DENY")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+        if path.startswith("/api/") and not self._api_guard():
+            return
+        if path == "/api/fleet":
+            self._send_json(200, _fleet_payload("hist=1" in (u.query or "")))
             return
         if path == "/api/stats":
             body = json.dumps(snapshot()).encode()
@@ -1306,6 +1460,16 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path != "/api/config":
             self.send_error(404)
+            return
+        if not self._api_guard():
+            return
+        # CSRF: only same-origin JSON writes. Cross-site pages can't send
+        # application/json without a CORS preflight, which we never grant.
+        ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        origin = self.headers.get("Origin")
+        if ctype != "application/json" or (
+                origin and _host_only(urlsplit(origin).netloc) != _host_only(self.headers.get("Host", ""))):
+            self._send_json(403, {"error": "cross-origin or non-JSON config writes are refused"})
             return
         try:
             length = int(self.headers.get("Content-Length", "0") or "0")

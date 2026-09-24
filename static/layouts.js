@@ -11,7 +11,7 @@
 // same numbers the user sees on the default panel.
 // ══════════════════════════════════════════════════════════════════
 
-const LAYOUTS = ["default", "gauges", "heatmap", "flowstrip", "minimal", "hub", "hubcards"];
+const LAYOUTS = ["default", "gauges", "heatmap", "flowstrip", "minimal", "hub", "hubcards", "fleet"];
 const LAYOUT_LABELS = {
   default:    "DEFAULT",
   gauges:     "GAUGES",
@@ -20,6 +20,7 @@ const LAYOUT_LABELS = {
   minimal:    "MINIMAL",
   hub:        "HUB",
   hubcards:   "HUB · CARDS",
+  fleet:      "FLEET",
 };
 const LAYOUT_CHIP = {
   default:    "DFLT",
@@ -29,6 +30,7 @@ const LAYOUT_CHIP = {
   minimal:    "MNML",
   hub:        "HUB",
   hubcards:   "CARD",
+  fleet:      "FLT",
 };
 
 let currentLayout = (() => {
@@ -189,6 +191,24 @@ function buildLayoutSwatch(name) {
     const strip = document.createElement("div");
     strip.className = "strip";
     preview.append(clock, wx, q, strip);
+  } else if (name === "fleet") {
+    // Summary strip over side-by-side machine columns, each with a big
+    // number, a spark and a couple of bar rows — the fleet silhouette.
+    const strip = document.createElement("div");
+    strip.className = "strip";
+    const nodes = document.createElement("div");
+    nodes.className = "nodes";
+    for (let i = 0; i < 3; i++) {
+      const n = document.createElement("div");
+      n.className = "node-mini";
+      for (const cls of ["big", "spark", "line", "line short"]) {
+        const x = document.createElement("div");
+        x.className = cls;
+        n.appendChild(x);
+      }
+      nodes.appendChild(n);
+    }
+    preview.append(strip, nodes);
   } else if (name === "hubcards") {
     // Two-column top — clock on the left, two stacked cards (weather ·
     // quote) on the right — over a thin vitals strip.
@@ -3043,6 +3063,12 @@ window.addEventListener("keydown", (e) => {
     case "5": e.preventDefault(); applyLayout("minimal");   break;
     case "6": e.preventDefault(); applyLayout("hub");       break;
     case "7": e.preventDefault(); applyLayout("hubcards");  break;
+    case "8": e.preventDefault(); applyLayout("fleet");     break;
+    case "v":
+      if (currentLayout === "fleet" && typeof window.__kioskFleetCycleView === "function") {
+        e.preventDefault(); window.__kioskFleetCycleView();
+      }
+      break;
   }
 }, true);
 

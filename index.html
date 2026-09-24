@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="static/style.css">
 <link rel="stylesheet" href="static/themes.css">
 <link rel="stylesheet" href="static/layouts.css">
+<link rel="stylesheet" href="static/fleet.css">
 </head>
 <body>
 
@@ -39,7 +40,8 @@
     <span class="vigosk-help-key">G</span><span class="vigosk-help-desc">line / braille graph mode</span>
     <span class="vigosk-help-key">T</span><span class="vigosk-help-desc">theme picker</span>
     <span class="vigosk-help-key">A · D</span><span class="vigosk-help-desc">previous / next theme</span>
-    <span class="vigosk-help-key">1 – 7</span><span class="vigosk-help-desc">default · gauges · heatmap · flowstrip · minimal · hub · hub·cards</span>
+    <span class="vigosk-help-key">1 – 8</span><span class="vigosk-help-desc">default · gauges · heatmap · flowstrip · minimal · hub · hub·cards · fleet</span>
+    <span class="vigosk-help-key">V</span><span class="vigosk-help-desc">fleet: auto / columns / list view</span>
     <span class="vigosk-help-key">↑ ↓ ← →</span><span class="vigosk-help-desc">navigate menu actions</span>
     <span class="vigosk-help-key">Enter</span><span class="vigosk-help-desc">activate focused action</span>
     <span class="vigosk-help-key">?</span><span class="vigosk-help-desc">show this help</span>
@@ -231,6 +233,21 @@
 <!-- Services status modal — opened by tapping SVC on the hub footer.
      Read-only up/down view of the configured container watch-list; the
      probing itself is the host-side ICMP pinger in metrics.py. -->
+<!-- Fleet node detail — opened by tapping a machine on the FLEET layout. -->
+<div class="theme-modal fleet-modal" id="fleet-modal" aria-hidden="true">
+  <div class="theme-modal-box">
+    <button class="modal-back" aria-label="Close">← CLOSE</button>
+    <div class="theme-modal-title" id="flm-title">—</div>
+    <div class="flm-sub" id="flm-sub"></div>
+    <div class="flm-grid">
+      <section class="flm-sec"><div class="flm-h">CORES</div><div class="flm-cores" id="flm-cores"></div></section>
+      <section class="flm-sec"><div class="flm-h">STORAGE</div><div id="flm-disks"></div></section>
+      <section class="flm-sec"><div class="flm-h">TOP PROCESSES</div><div id="flm-procs"></div></section>
+      <section class="flm-sec"><div class="flm-h">SYSTEM</div><div id="flm-net"></div></section>
+    </div>
+  </div>
+</div>
+
 <div class="theme-modal services-modal" id="services-modal" aria-hidden="true">
   <div class="theme-modal-box">
     <button class="modal-back" data-back="services" aria-label="Close">← CLOSE</button>
@@ -913,7 +930,39 @@
 
 </div>
 
+<!-- ── Fleet layout ─────────────────────────────────────────────────
+     Every paired machine on one screen (static/fleet.js). A summary
+     strip combines the fleet; below it, one column per machine (up to
+     four) or a dense ledger row per machine (five or more). -->
+<div class="layout layout-fleet" id="layout-fleet">
+  <div class="fl-summary">
+    <span class="fl-sum-title">FLEET</span>
+    <span class="fl-sum-item"><span class="fl-sum-k">ONLINE</span><span class="fl-sum-v" id="fl-sum-nodes">—</span></span>
+    <span class="fl-sum-item"><span class="fl-sum-k">CPU</span><span class="fl-sum-v" id="fl-sum-cpu">—</span><span class="fl-sum-sub" id="fl-sum-cores"></span></span>
+    <span class="fl-sum-item"><span class="fl-sum-k">MEM</span><span class="fl-sum-v" id="fl-sum-mem">—</span><span class="fl-sum-sub" id="fl-sum-memb"></span></span>
+    <span class="fl-sum-item fl-sum-net"><span class="fl-sum-k">NET</span><span class="fl-sum-v" id="fl-sum-net">—</span></span>
+    <span class="fl-sum-item" id="fl-sum-guests-item" hidden><span class="fl-sum-k">GUESTS</span><span class="fl-sum-v" id="fl-sum-guests">—</span></span>
+    <span class="fl-sum-alert" id="fl-sum-alert">—</span>
+    <button class="fl-view-btn" id="fl-view-btn" type="button" title="Switch view: auto · columns · list (V)">AUTO</button>
+  </div>
+  <div class="fl-grid" id="fl-grid" data-view="columns"></div>
+</div>
+
+<!-- Ghost column shown while this machine is the only one on the fleet. -->
+<template id="fl-add-tpl">
+  <section class="fl-node fl-add">
+    <div class="fl-add-title">+ ADD A MACHINE</div>
+    <ol class="fl-add-steps">
+      <li>on this hub:&nbsp; <code>sudo vigosk node add &lt;name&gt;</code></li>
+      <li>paste the command it prints on the other machine</li>
+      <li>it appears here within a few seconds</li>
+    </ol>
+    <div class="fl-add-state" id="fl-add-hub-state"></div>
+  </section>
+</template>
+
 <script src="static/app.js"></script>
 <script src="static/layouts.js"></script>
+<script src="static/fleet.js"></script>
 </body>
 </html>
