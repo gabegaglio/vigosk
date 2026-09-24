@@ -15,12 +15,14 @@ import json
 import os
 import re
 import socket
+import ssl
 import subprocess
 import threading
 import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import psutil
 
@@ -80,6 +82,55 @@ CONTAINER_CAP_MIN          = 1
 CONTAINER_CAP_MAX          = 64
 CONTAINER_MAX_TARGETS      = 128   # hard ceiling on configured targets
 
+# ── Weather (Open-Meteo, keyless) ────────────────────────────────────
+# Fetched *server-side* so the browser only ever talks to 127.0.0.1 —
+# no third-party egress from the kiosk page, no CORS holes, and no API
+# key to leak in a public repo. Open-Meteo needs no signup or key. The
+# feature is opt-in: it stays dark until the user sets a location, so a
+# fresh clone makes zero outbound requests and leaks no coordinates.
+# The request URL is a fixed scheme+host; the user only supplies numeric
+# lat/lon (validated + clamped) and a unit enum, so there's no SSRF
+# surface — the config can't redirect the fetch at an arbitrary host.
+WEATHER_URL      = "https://api.open-meteo.com/v1/forecast"
+WEATHER_REFRESH  = 900.0   # seconds between successful refreshes (15 min)
+WEATHER_RETRY    = 120.0   # retry sooner after a failed fetch
+WEATHER_IDLE     = 30.0    # re-poll config this often while disabled
+WEATHER_TIMEOUT  = 6.0     # per-request timeout
+WEATHER_MAX_BYTES = 64 * 1024   # cap the response we read
+
+# WMO weather-interpretation codes → (short text, emoji glyph).
+# https://open-meteo.com/en/docs — condensed to the buckets we render.
+_WMO_CODES = {
+    0:  ("Clear", "☀️"),
+    1:  ("Mostly clear", "🌤️"),
+    2:  ("Partly cloudy", "⛅"),
+    3:  ("Overcast", "☁️"),
+    45: ("Fog", "🌫️"),
+    48: ("Rime fog", "🌫️"),
+    51: ("Light drizzle", "🌦️"),
+    53: ("Drizzle", "🌦️"),
+    55: ("Heavy drizzle", "🌦️"),
+    56: ("Freezing drizzle", "🌧️"),
+    57: ("Freezing drizzle", "🌧️"),
+    61: ("Light rain", "🌦️"),
+    63: ("Rain", "🌧️"),
+    65: ("Heavy rain", "🌧️"),
+    66: ("Freezing rain", "🌧️"),
+    67: ("Freezing rain", "🌧️"),
+    71: ("Light snow", "🌨️"),
+    73: ("Snow", "🌨️"),
+    75: ("Heavy snow", "❄️"),
+    77: ("Snow grains", "🌨️"),
+    80: ("Rain showers", "🌦️"),
+    81: ("Rain showers", "🌧️"),
+    82: ("Violent showers", "⛈️"),
+    85: ("Snow showers", "🌨️"),
+    86: ("Snow showers", "❄️"),
+    95: ("Thunderstorm", "⛈️"),
+    96: ("Thunderstorm", "⛈️"),
+    99: ("Thunderstorm", "⛈️"),
+}
+
 # ── Runtime config (editable from the kiosk UI, persisted to disk) ────
 # Settings the user can change at runtime without restarting the server:
 # the gateway + external ping targets and the container watch list. The
@@ -126,6 +177,21 @@ def _valid_host(s: str) -> bool:
     return bool(_HOSTNAME_RE.match(s))
 
 
+def _coerce_coord(v, limit: float):
+    """Parse a coordinate to a float in [-limit, limit], else None.
+
+    Rejects NaN/inf and out-of-range values so the weather fetch can
+    only ever be handed a sane latitude/longitude.
+    """
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if f != f or f in (float("inf"), float("-inf")) or abs(f) > limit:
+        return None
+    return round(f, 4)
+
+
 _DEFAULT_CONFIG = {
     "ping": {
         # Empty gw ⇒ auto-detect the default gateway (preserves the
@@ -141,6 +207,16 @@ _DEFAULT_CONFIG = {
         "interval_s":    CONTAINER_DEFAULT_INTERVAL,
         "max_per_cycle": CONTAINER_DEFAULT_CAP,
         "targets":       [],   # list of {"name": str, "host": str}
+    },
+    "weather": {
+        # Opt-in. Ships disabled with no location so a fresh clone makes
+        # no outbound requests. lat/lon are decimal degrees; unit is the
+        # temperature unit; label is a free-text place name for the UI.
+        "enabled": False,
+        "lat":     None,
+        "lon":     None,
+        "unit":    "c",   # "c" | "f"
+        "label":   "",
     },
 }
 
@@ -197,6 +273,18 @@ def _sanitize_config(raw: dict) -> dict:
                 if len(clean) >= CONTAINER_MAX_TARGETS:
                     break
         cfg["containers"]["targets"] = clean
+    wx = raw.get("weather")
+    if isinstance(wx, dict):
+        lat = _coerce_coord(wx.get("lat"), 90.0)
+        lon = _coerce_coord(wx.get("lon"), 180.0)
+        cfg["weather"]["lat"] = lat
+        cfg["weather"]["lon"] = lon
+        unit = str(wx.get("unit", "c")).strip().lower()
+        cfg["weather"]["unit"] = "f" if unit == "f" else "c"
+        cfg["weather"]["label"] = str(wx.get("label", "")).strip()[:48]
+        # Can't be enabled without a valid location — prevents an
+        # "enabled but nowhere" state that would just error every cycle.
+        cfg["weather"]["enabled"] = bool(wx.get("enabled", False)) and lat is not None and lon is not None
     return cfg
 
 
@@ -677,6 +765,139 @@ _DISK_LIST: list[dict] = []  # populated by fast loop, list of {label, total, us
 # `up` means "not yet probed this run" (rendered neutral/pending by the UI).
 _CONTAINER_STATE: dict[str, dict] = {}
 
+# Latest weather reading, populated by _weather_loop. `ok` flips false on
+# a failed fetch so the UI can show a stale/offline hint. Guarded by _LOCK.
+_WEATHER_STATE: dict = {
+    "ok": False, "ts": 0.0,
+    "temp": None, "feels": None, "hi": None, "lo": None,
+    "humidity": None, "wind": None,
+    "code": None, "text": None, "icon": None,
+}
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse HTTP redirects on the weather fetch.
+
+    The request always targets one fixed, trusted host. Following a 3xx
+    could steer the fetch at an attacker-chosen URL (including a
+    link-local/internal address) if Open-Meteo were ever spoofed or
+    compromised — a classic SSRF pivot. Fail closed instead.
+    """
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+# Dedicated opener: TLS ≥1.2 with the default verified context (checks
+# cert chain + hostname) and no redirect following. Built once, reused.
+_WEATHER_TLS = ssl.create_default_context()
+_WEATHER_TLS.minimum_version = ssl.TLSVersion.TLSv1_2
+_WEATHER_OPENER = urllib.request.build_opener(
+    _NoRedirect,
+    urllib.request.HTTPSHandler(context=_WEATHER_TLS),
+)
+
+
+def _fetch_weather(lat: float, lon: float, unit: str) -> dict | None:
+    """One keyless Open-Meteo current-conditions fetch. None on any error.
+
+    The URL is built from a fixed constant base plus urlencoded numeric
+    params, so the caller-supplied coordinates can't alter the host.
+    """
+    params = {
+        "latitude":  f"{lat:.4f}",
+        "longitude": f"{lon:.4f}",
+        "current":   "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m",
+        "daily":     "temperature_2m_max,temperature_2m_min",
+        "temperature_unit": "fahrenheit" if unit == "f" else "celsius",
+        "wind_speed_unit":  "kmh",
+        "timezone":  "auto",
+        "forecast_days": 1,
+    }
+    url = WEATHER_URL + "?" + urlencode(params)
+    # Belt-and-suspenders: never dispatch a request that isn't our host.
+    if not url.startswith(WEATHER_URL + "?"):
+        return None
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "vigosk/1.0 (+https://github.com/gabegaglio/vigosk)",
+        "Accept": "application/json",
+    })
+    # Fail closed: only accept a clean 200 from our exact HTTPS host with a
+    # JSON body, no redirects. Read is capped to WEATHER_MAX_BYTES so a
+    # hostile/oversized response can't exhaust memory.
+    try:
+        with _WEATHER_OPENER.open(req, timeout=WEATHER_TIMEOUT) as r:
+            if not r.geturl().startswith(WEATHER_URL + "?"):
+                return None                       # redirected / not our host
+            if getattr(r, "status", 200) != 200:
+                return None
+            if "json" not in (r.headers.get("Content-Type") or "").lower():
+                return None
+            raw = r.read(WEATHER_MAX_BYTES)
+    except Exception:
+        return None
+    try:
+        obj = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+
+    def _num(v):
+        try:
+            return round(float(v), 1)
+        except (TypeError, ValueError):
+            return None
+
+    cur = obj.get("current") or {}
+    daily = obj.get("daily") or {}
+    code = cur.get("weather_code")
+    try:
+        code = int(code)
+    except (TypeError, ValueError):
+        code = None
+    text, icon = _WMO_CODES.get(code, ("—", "🌡️"))
+
+    def _first(seq):
+        return seq[0] if isinstance(seq, list) and seq else None
+
+    return {
+        "temp":     _num(cur.get("temperature_2m")),
+        "feels":    _num(cur.get("apparent_temperature")),
+        "humidity": _num(cur.get("relative_humidity_2m")),
+        "wind":     _num(cur.get("wind_speed_10m")),
+        "hi":       _num(_first(daily.get("temperature_2m_max"))),
+        "lo":       _num(_first(daily.get("temperature_2m_min"))),
+        "code":     code,
+        "text":     text,
+        "icon":     icon,
+    }
+
+
+def _weather_loop() -> None:
+    """Refresh weather when enabled; otherwise idle-poll the config.
+
+    Sleeps WEATHER_REFRESH between good fetches, WEATHER_RETRY after a
+    failure, and WEATHER_IDLE while the feature is off — so toggling it
+    on from the UI takes effect within ~30 s without a restart.
+    """
+    while True:
+        wait = WEATHER_IDLE
+        try:
+            wx = _get_config().get("weather", {})
+            if wx.get("enabled") and wx.get("lat") is not None and wx.get("lon") is not None:
+                data = _fetch_weather(wx["lat"], wx["lon"], wx.get("unit", "c"))
+                with _LOCK:
+                    if data is not None:
+                        _WEATHER_STATE.update(data)
+                        _WEATHER_STATE["ok"] = True
+                        _WEATHER_STATE["ts"] = time.time()
+                        wait = WEATHER_REFRESH
+                    else:
+                        _WEATHER_STATE["ok"] = False
+                        wait = WEATHER_RETRY
+        except Exception as e:
+            print(f"[weather_loop] {e}", flush=True)
+            wait = WEATHER_RETRY
+        time.sleep(wait)
+
 
 def _clean_cpu_name(raw: str) -> str:
     """Sanitize a /proc/cpuinfo model string for compact display.
@@ -992,14 +1213,34 @@ def snapshot() -> dict:
         "max_per_cycle": cont_cfg.get("max_per_cycle", CONTAINER_DEFAULT_CAP),
         "list":          cont_list,
     }
+    wx_cfg = _get_config().get("weather", {})
+    with _LOCK:
+        wx = dict(_WEATHER_STATE)
+    weather = {
+        "enabled": bool(wx_cfg.get("enabled")),
+        "unit":    wx_cfg.get("unit", "c"),
+        "label":   wx_cfg.get("label", ""),
+        "ok":      wx.get("ok", False),
+        "temp":    wx.get("temp"),
+        "feels":   wx.get("feels"),
+        "hi":      wx.get("hi"),
+        "lo":      wx.get("lo"),
+        "humidity": wx.get("humidity"),
+        "wind":    wx.get("wind"),
+        "code":    wx.get("code"),
+        "text":    wx.get("text"),
+        "icon":    wx.get("icon"),
+        "ts":      wx.get("ts"),
+    }
     if fast is None:
-        return {"loading": True, "containers": containers}
+        return {"loading": True, "containers": containers, "weather": weather}
     out = dict(fast)
     out["procs_top"] = procs
     out["net"] = {**out["net"], "ping": ping}
     out["gpu"] = gpu
     out["disks"] = disks
     out["containers"] = containers
+    out["weather"] = weather
     return out
 
 
@@ -1093,6 +1334,7 @@ def main():
     threading.Thread(target=_ping_loop, name="ping-sampler", daemon=True).start()
     threading.Thread(target=_gpu_loop,  name="gpu-sampler",  daemon=True).start()
     threading.Thread(target=_container_loop, name="container-sampler", daemon=True).start()
+    threading.Thread(target=_weather_loop, name="weather-sampler", daemon=True).start()
     host = os.environ.get("VIGOSK_HOST", "127.0.0.1").strip() or "127.0.0.1"
     try:
         port = int(os.environ.get("VIGOSK_PORT", "8765"))

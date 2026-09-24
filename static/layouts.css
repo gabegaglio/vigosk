@@ -1950,3 +1950,306 @@
 }
 .preview-minimal .lcol .line.head { background: var(--dim-2); width: 70%; }
 .preview-minimal .lcol .line.short { width: 55%; }
+
+/* ══════════════════════════════════════════════════════════════════
+   Hub layout — casual smart-home screen
+   ══════════════════════════════════════════════════════════════════ */
+[data-layout="hub"] .panels { display: none; }
+[data-layout="hub"] .layout-hub { display: flex; }
+
+.layout-hub {
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: clamp(8px, 2vh, 22px);
+  padding: clamp(8px, 2vh, 26px);
+  text-align: center;
+}
+
+/* ── Clock hero — centred, fills the space above the quote line ──── */
+.hub-main {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: clamp(2px, 0.8vh, 8px);
+  flex: 1 1 auto;
+  min-width: 0; min-height: 0;
+}
+.hub-greeting {
+  color: var(--accent-2);
+  font-size: clamp(13px, 2.6vh, 26px);
+  font-weight: 600; letter-spacing: 3px; text-transform: uppercase;
+}
+.hub-clock {
+  display: flex; align-items: flex-start; justify-content: center;
+  gap: clamp(6px, 1.2vw, 18px);
+  line-height: 0.9;
+}
+.hub-time {
+  color: var(--fg-bright);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(72px, 26vh, 300px);
+  font-weight: 700; letter-spacing: -4px;
+}
+.hub-clock-side {
+  display: flex; flex-direction: column; align-items: flex-start;
+  justify-content: flex-start;
+  margin-top: clamp(6px, 2vh, 22px);
+  gap: 2px;
+}
+.hub-secs {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(20px, 6vh, 64px);
+  font-weight: 700; letter-spacing: -1px;
+}
+.hub-ampm {
+  color: var(--dim);
+  font-size: clamp(12px, 2.4vh, 26px);
+  font-weight: 700; letter-spacing: 3px;
+}
+.hub-date {
+  color: var(--fg);
+  font-size: clamp(14px, 2.8vh, 30px);
+  font-weight: 500; letter-spacing: 2px;
+}
+
+/* ── Weather — one inline line right under the date ──────────────── */
+.hub-wx-line {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center;
+  gap: clamp(6px, 1vw, 12px);
+  margin-top: clamp(5px, 1.2vh, 12px);
+  font-variant-numeric: tabular-nums;
+}
+.hub-wx-line .hub-wx-icon { font-size: clamp(17px, 3vh, 30px); line-height: 1; }
+.hub-wx-line .hub-wx-temp {
+  color: var(--fg-bright); font-weight: 700; letter-spacing: -0.5px;
+  font-size: clamp(18px, 3.4vh, 34px);
+}
+.hub-wx-line .hub-wx-text { color: var(--fg); font-weight: 600; font-size: clamp(13px, 2.2vh, 22px); }
+.hub-wx-line .hub-wx-meta { color: var(--dim); font-size: clamp(12px, 1.9vh, 18px); }
+/* Middot separators, only before spans that actually carry text. */
+.hub-wx-line .hub-wx-text:not(:empty)::before,
+.hub-wx-line .hub-wx-meta:not(:empty)::before {
+  content: "·"; color: var(--dim); margin-right: clamp(5px, 0.9vw, 11px);
+}
+
+/* ── Quote — a single line just above the footer ─────────────────── */
+.hub-quote-line {
+  display: flex; justify-content: center; align-items: baseline;
+  gap: clamp(6px, 1vw, 12px);
+  width: 100%; padding: 0 clamp(10px, 3vw, 32px);
+  white-space: nowrap; overflow: hidden;
+}
+.hub-quote-line .hub-quote-text {
+  color: var(--fg-bright);
+  font-size: clamp(13px, 2.3vh, 22px);
+  font-weight: 500; font-style: italic;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.hub-quote-line .hub-quote-author {
+  color: var(--accent-2);
+  font-size: clamp(11px, 1.8vh, 17px);
+  font-weight: 600; letter-spacing: 1px; flex: none;
+}
+
+/* ── Vitals footer ───────────────────────────────────────────────── */
+/* Kept minimal but a step larger and more legible from across a room —
+   sits at the foot of the bottom band, aligned to the cards' width. */
+.hub-sys {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
+  gap: clamp(14px, 3vw, 42px);
+  padding-top: clamp(8px, 1.8vh, 18px);
+  border-top: 1px solid var(--dim-2);
+  width: min(100%, 1120px);
+}
+.hub-sys-item { display: flex; align-items: baseline; gap: 8px; }
+.hub-sys-k {
+  color: var(--dim);
+  font-size: clamp(10px, 1.6vh, 13px);
+  font-weight: 700; letter-spacing: 2px;
+}
+.hub-sys-v {
+  color: var(--fg-bright);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(15px, 2.5vh, 22px); font-weight: 700;
+}
+/* The SVC item is tappable — opens the services status modal. */
+.hub-sys-item.clickable { cursor: pointer; border-radius: 4px; padding: 2px 6px; margin: -2px -6px; }
+.hub-sys-item.clickable:hover,
+.hub-sys-item.clickable:active { background: var(--dim-2); }
+.hub-sys-item.clickable .hub-sys-k { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+
+/* ── Services status modal (opened from the hub SVC footer) ───────── */
+.svc-summary {
+  display: flex; justify-content: center; gap: clamp(12px, 3vw, 28px);
+  margin: 4px 0 12px; font-variant-numeric: tabular-nums;
+}
+.svc-summary .up   { color: var(--good); font-weight: 700; }
+.svc-summary .down { color: var(--crit); font-weight: 700; }
+.svc-summary .tot  { color: var(--dim); }
+.svc-list {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 46vh; overflow-y: auto;
+  text-align: left;
+}
+.svc-row {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 10px; padding: 7px 12px;
+  background: var(--panel, rgba(255,255,255,0.02));
+  border: 1px solid var(--dim-2); border-radius: 5px;
+}
+.svc-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); }
+.svc-dot.up   { background: var(--good); box-shadow: 0 0 6px var(--good); }
+.svc-dot.down { background: var(--crit); box-shadow: 0 0 6px var(--crit); }
+.svc-name { color: var(--fg-bright); font-weight: 600; letter-spacing: 0.5px; }
+.svc-host { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 12px; }
+.svc-state { font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+.svc-state.up   { color: var(--good); }
+.svc-state.down { color: var(--crit); }
+.svc-state.pending { color: var(--dim); }
+.svc-empty { color: var(--dim); font-style: italic; padding: 16px; text-align: center; }
+
+/* Short strips: shrink the clock so the date, weather line, quote and
+   footer all still fit. */
+@media (max-height: 460px) {
+  .hub-time { font-size: clamp(56px, 30vh, 150px); }
+  .layout-hub { gap: clamp(4px, 1vh, 10px); }
+  .hub-sys { padding-top: clamp(6px, 1.4vh, 12px); }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Hub · Cards layout — two-column variant (clock left · cards right)
+   ══════════════════════════════════════════════════════════════════ */
+[data-layout="hubcards"] .panels { display: none; }
+[data-layout="hubcards"] .layout-hubcards { display: flex; }
+
+.layout-hubcards {
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: clamp(8px, 2vh, 22px);
+  padding: clamp(8px, 2vh, 26px);
+  text-align: center;
+}
+
+/* Two-column top: clock (left) · cards (right). */
+.hc-top {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(12px, 3vw, 44px);
+  align-items: stretch;
+  width: min(100%, 1200px);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.hc-main {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: clamp(2px, 0.8vh, 8px);
+  min-width: 0; min-height: 0;
+}
+
+/* Right column: weather + quote as two equal-measurement cards. Only
+   two of the three children are ever visible (weather XOR its off-hint),
+   so the 1fr/1fr rows always hold exactly two same-size cards. */
+.hc-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: clamp(8px, 1.6vh, 18px);
+  width: 100%;
+  min-height: 0;
+  align-items: stretch;
+}
+.hc-card {
+  background: var(--panel, rgba(255,255,255,0.02));
+  border: 1px solid var(--dim-2);
+  border-radius: 8px;
+  padding: clamp(9px, 1.5vh, 18px) clamp(14px, 2vw, 26px);
+  display: flex; flex-direction: column;
+  gap: clamp(3px, 0.7vh, 8px);
+  text-align: left; min-width: 0; min-height: 0;
+  overflow: hidden;
+}
+.hc-card-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  color: var(--dim);
+  font-size: clamp(9px, 1.5vh, 13px);
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+}
+.hc-card-meta { color: var(--accent-2); letter-spacing: 1px; text-transform: none; }
+
+/* Weather card — head pinned top-left, reading centred in the body. */
+.hc-weather-main { display: flex; align-items: center; gap: clamp(6px, 1.4vw, 16px); margin-top: auto; }
+.hc-wx-meta { margin-bottom: auto; }
+.hc-wx-icon { font-size: clamp(30px, 7vh, 68px); line-height: 1; }
+.hc-wx-temp {
+  color: var(--fg-bright);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(34px, 9vh, 84px);
+  font-weight: 700; letter-spacing: -2px; line-height: 0.9;
+}
+.hc-wx-text { color: var(--fg); font-size: clamp(13px, 2.2vh, 22px); font-weight: 600; }
+.hc-wx-meta { color: var(--dim); font-size: clamp(11px, 1.6vh, 15px); font-variant-numeric: tabular-nums; }
+.hc-wx-hint { color: var(--dim); font-size: clamp(12px, 2vh, 18px); line-height: 1.5; font-style: italic; margin: auto 0; }
+
+/* Quote card — head pinned top-left, line + author centred in the body. */
+.hc-quote-text {
+  color: var(--fg-bright);
+  font-size: clamp(13px, 2.4vh, 24px);
+  font-weight: 500; line-height: 1.35; font-style: italic;
+  margin-top: auto;
+}
+.hc-quote-author {
+  color: var(--accent-2);
+  font-size: clamp(11px, 1.7vh, 17px);
+  font-weight: 600; letter-spacing: 1px;
+  margin-bottom: auto;
+}
+
+/* Short strips: tighten so the cards still fit (.hub-time/.hub-sys short
+   rules already apply via the shared clock/footer classes). */
+@media (max-height: 460px) {
+  .layout-hubcards { gap: clamp(4px, 1vh, 10px); }
+  .hc-card { padding: clamp(8px, 1.4vh, 14px) clamp(12px, 1.6vw, 22px); }
+}
+
+/* Layout-picker preview. */
+.preview-hubcards {
+  display: flex; flex-direction: column; gap: 4px; padding: 3px;
+}
+.preview-hubcards .top { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; flex: 1 1 auto; min-height: 0; }
+.preview-hubcards .clock {
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--dim) 72%, transparent 72%);
+  background-size: 100% 7px; background-repeat: no-repeat; background-position: center;
+}
+.preview-hubcards .cards { display: grid; grid-template-rows: 1fr 1fr; gap: 4px; min-height: 0; }
+.preview-hubcards .card-mini { background: var(--dim-2); border-radius: 2px; }
+.preview-hubcards .strip { height: 4px; background: var(--dim); border-radius: 1px; }
+
+/* ── kform toggle button (weather modal) ─────────────────────────── */
+.kform-toggle {
+  background: var(--panel); color: var(--dim);
+  border: 1px solid var(--dim-2); border-radius: 2px;
+  padding: 5px 14px; min-width: 54px;
+  font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 1px;
+  cursor: pointer; touch-action: manipulation;
+  user-select: none; -webkit-user-select: none;
+}
+.kform-toggle.on { color: var(--bg); background: var(--good); border-color: var(--good); }
+.kform-toggle:active { transform: scale(0.96); }
+
+/* ── Layout-picker preview (preview-hub) ─────────────────────────── */
+.preview-hub {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; padding: 4px;
+}
+.preview-hub .clock { width: 62%; height: 30%; border-radius: 3px; background: var(--dim); }
+.preview-hub .wxline { width: 46%; height: 4px; border-radius: 2px; background: var(--dim-2); }
+.preview-hub .qline { width: 72%; height: 4px; border-radius: 2px; background: var(--dim-2); margin-top: auto; }
+.preview-hub .strip { width: 100%; height: 4px; background: var(--dim); border-radius: 1px; }

@@ -39,7 +39,7 @@
     <span class="vigosk-help-key">G</span><span class="vigosk-help-desc">line / braille graph mode</span>
     <span class="vigosk-help-key">T</span><span class="vigosk-help-desc">theme picker</span>
     <span class="vigosk-help-key">A · D</span><span class="vigosk-help-desc">previous / next theme</span>
-    <span class="vigosk-help-key">1 – 4</span><span class="vigosk-help-desc">default · gauges · heatmap · flowstrip</span>
+    <span class="vigosk-help-key">1 – 7</span><span class="vigosk-help-desc">default · gauges · heatmap · flowstrip · minimal · hub · hub·cards</span>
     <span class="vigosk-help-key">↑ ↓ ← →</span><span class="vigosk-help-desc">navigate menu actions</span>
     <span class="vigosk-help-key">Enter</span><span class="vigosk-help-desc">activate focused action</span>
     <span class="vigosk-help-key">?</span><span class="vigosk-help-desc">show this help</span>
@@ -91,6 +91,10 @@
         <button class="settings-btn" id="settings-containers-btn">
           <span class="settings-btn-label">CONTAINERS</span>
           <span class="settings-btn-value" id="settings-containers-value">configure</span>
+        </button>
+        <button class="settings-btn" id="settings-weather-btn">
+          <span class="settings-btn-label">WEATHER</span>
+          <span class="settings-btn-value" id="settings-weather-value">location</span>
         </button>
       </div>
     </div>
@@ -181,6 +185,59 @@
       <button class="kform-save" id="ctr-save">SAVE</button>
     </div>
     <div class="theme-modal-hint">name is optional · press Enter to add · pings stagger when the list exceeds max/cycle</div>
+  </div>
+</div>
+
+<!-- Weather location modal — feeds the hub layout's weather card. The
+     fetch itself runs server-side in metrics.py via keyless Open-Meteo;
+     this form only supplies coordinates + display prefs. -->
+<div class="theme-modal weather-modal" id="weather-modal" aria-hidden="true">
+  <div class="theme-modal-box">
+    <button class="modal-back" data-back="weather" aria-label="Back to settings">← BACK</button>
+    <div class="theme-modal-title">WEATHER · LOCATION</div>
+    <div class="kform">
+      <div class="kform-row">
+        <span class="kform-label">ENABLED</span>
+        <button class="kform-toggle" id="wx-enabled-btn" type="button" aria-pressed="false">OFF</button>
+      </div>
+      <label class="kform-row">
+        <span class="kform-label">LATITUDE</span>
+        <input class="kform-input" id="wx-lat-input" type="text"
+               inputmode="decimal" autocomplete="off" spellcheck="false"
+               placeholder="e.g. 40.71">
+      </label>
+      <label class="kform-row">
+        <span class="kform-label">LONGITUDE</span>
+        <input class="kform-input" id="wx-lon-input" type="text"
+               inputmode="decimal" autocomplete="off" spellcheck="false"
+               placeholder="e.g. -74.01">
+      </label>
+      <label class="kform-row">
+        <span class="kform-label">LABEL</span>
+        <input class="kform-input" id="wx-label-input" type="text"
+               autocomplete="off" spellcheck="false" placeholder="e.g. Home" maxlength="48">
+      </label>
+      <div class="kform-row">
+        <span class="kform-label">UNIT</span>
+        <button class="kform-toggle" id="wx-unit-btn" type="button">°C</button>
+      </div>
+      <div class="kform-msg" id="wx-msg"></div>
+      <button class="kform-save" id="wx-save">SAVE</button>
+    </div>
+    <div class="theme-modal-hint">fetched server-side via keyless Open-Meteo · coordinates only, no account · off by default</div>
+  </div>
+</div>
+
+<!-- Services status modal — opened by tapping SVC on the hub footer.
+     Read-only up/down view of the configured container watch-list; the
+     probing itself is the host-side ICMP pinger in metrics.py. -->
+<div class="theme-modal services-modal" id="services-modal" aria-hidden="true">
+  <div class="theme-modal-box">
+    <button class="modal-back" data-back="services" aria-label="Close">← CLOSE</button>
+    <div class="theme-modal-title">SERVICES</div>
+    <div class="svc-summary" id="svc-summary"></div>
+    <div class="svc-list" id="svc-list"></div>
+    <div class="theme-modal-hint">host-side ICMP · edit the list in OPTIONS → CONTAINERS</div>
   </div>
 </div>
 
@@ -743,6 +800,115 @@
       <div class="mn-empty" id="mn-ctr-empty">no targets configured</div>
     </section>
 
+  </div>
+
+</div>
+
+<!-- ── Hub layout ─────────────────────────────────────────────────────
+     Active when documentElement[data-layout="hub"]. A calm "smart-home
+     screen" as a two-column top over a footer: the oversized clock hero
+     (greeting + time + date) fills the LEFT column, the weather card
+     (server-fetched, opt-in) and daily quote stack as two equal cards in
+     the RIGHT column, and a slim strip of system vitals spans the foot.
+     Same /api/stats stream; the clock runs on its own 1 Hz timer so it
+     stays smooth even if a poll stalls. -->
+<div class="layout layout-hub" id="layout-hub">
+
+  <div class="hub-main">
+    <div class="hub-greeting" id="hub-greeting">Hello</div>
+    <div class="hub-clock">
+      <span class="hub-time" id="hub-time">--:--</span>
+      <span class="hub-clock-side">
+        <span class="hub-secs" id="hub-secs">00</span>
+        <span class="hub-ampm" id="hub-ampm"></span>
+      </span>
+    </div>
+    <div class="hub-date" id="hub-date">—</div>
+    <!-- Weather — one inline line right under the date. Server-fetched,
+         opt-in; stays hidden until a location is set (OPTIONS → WEATHER). -->
+    <div class="hub-wx-line" id="hub-wx-line" hidden>
+      <span class="hub-wx-icon" id="hub-wx-icon">🌡️</span>
+      <span class="hub-wx-temp" id="hub-wx-temp">—°</span>
+      <span class="hub-wx-text" id="hub-wx-text"></span>
+      <span class="hub-wx-meta" id="hub-wx-meta"></span>
+    </div>
+  </div>
+
+  <!-- Quote of the day — a single line just above the footer. Bundled
+       locally, rotates deterministically by date, nothing tracked. -->
+  <div class="hub-quote-line" id="hub-quote-line">
+    <span class="hub-quote-text" id="hub-quote-text">—</span>
+    <span class="hub-quote-author" id="hub-quote-author"></span>
+  </div>
+
+  <!-- Minimal system strip — vitals kept small on purpose. -->
+  <div class="hub-sys" id="hub-sys">
+    <span class="hub-sys-item"><span class="hub-sys-k">HOST</span><span class="hub-sys-v" id="hub-host">—</span></span>
+    <span class="hub-sys-item"><span class="hub-sys-k">CPU</span><span class="hub-sys-v" id="hub-cpu">—%</span></span>
+    <span class="hub-sys-item"><span class="hub-sys-k">MEM</span><span class="hub-sys-v" id="hub-mem">—%</span></span>
+    <span class="hub-sys-item"><span class="hub-sys-k">DISK</span><span class="hub-sys-v" id="hub-disk">—%</span></span>
+    <span class="hub-sys-item" id="hub-temp-item"><span class="hub-sys-k">TEMP</span><span class="hub-sys-v" id="hub-temp">—</span></span>
+    <span class="hub-sys-item"><span class="hub-sys-k">UP</span><span class="hub-sys-v" id="hub-up">—</span></span>
+    <span class="hub-sys-item clickable" id="hub-ctr-item" role="button" tabindex="0" title="View service status" hidden><span class="hub-sys-k">SVC</span><span class="hub-sys-v" id="hub-ctr">—</span></span>
+  </div>
+
+</div>
+
+<!-- ── Hub · Cards layout ─────────────────────────────────────────────
+     Active when documentElement[data-layout="hubcards"]. The earlier
+     two-column variant, kept as a second option: the clock hero fills
+     the LEFT column; weather and quote stack as two equal-size cards in
+     the RIGHT column; a vitals footer spans the foot. Shares the
+     /api/stats stream and the 1 Hz clock/quote timer with `hub` (clock
+     reuses the .hub-* classes for styling; ids are hc-*). -->
+<div class="layout layout-hubcards" id="layout-hubcards">
+
+  <div class="hc-top">
+
+    <div class="hc-main">
+      <div class="hub-greeting" id="hc-greeting">Hello</div>
+      <div class="hub-clock">
+        <span class="hub-time" id="hc-time">--:--</span>
+        <span class="hub-clock-side">
+          <span class="hub-secs" id="hc-secs">00</span>
+          <span class="hub-ampm" id="hc-ampm"></span>
+        </span>
+      </div>
+      <div class="hub-date" id="hc-date">—</div>
+    </div>
+
+    <div class="hc-cards">
+      <section class="hc-card hc-weather" id="hc-weather" hidden>
+        <div class="hc-card-head">WEATHER<span class="hc-card-meta" id="hc-wx-place"></span></div>
+        <div class="hc-weather-main">
+          <span class="hc-wx-icon" id="hc-wx-icon">🌡️</span>
+          <span class="hc-wx-temp" id="hc-wx-temp">—°</span>
+        </div>
+        <div class="hc-wx-text" id="hc-wx-text">—</div>
+        <div class="hc-wx-meta" id="hc-wx-meta">—</div>
+      </section>
+      <section class="hc-card hc-weather-off" id="hc-weather-off">
+        <div class="hc-card-head">WEATHER</div>
+        <div class="hc-wx-hint">Set a location in<br>OPTIONS → WEATHER</div>
+      </section>
+
+      <section class="hc-card hc-quote">
+        <div class="hc-card-head">QUOTE OF THE DAY</div>
+        <div class="hc-quote-text" id="hc-quote-text">—</div>
+        <div class="hc-quote-author" id="hc-quote-author"></div>
+      </section>
+    </div>
+
+  </div><!-- /.hc-top -->
+
+  <div class="hub-sys" id="hc-sys">
+    <span class="hub-sys-item"><span class="hub-sys-k">HOST</span><span class="hub-sys-v" id="hc-host">—</span></span>
+    <span class="hub-sys-item"><span class="hub-sys-k">CPU</span><span class="hub-sys-v" id="hc-cpu">—%</span></span>
+    <span class="hub-sys-item"><span class="hub-sys-k">MEM</span><span class="hub-sys-v" id="hc-mem">—%</span></span>
+    <span class="hub-sys-item"><span class="hub-sys-k">DISK</span><span class="hub-sys-v" id="hc-disk">—%</span></span>
+    <span class="hub-sys-item" id="hc-temp-item"><span class="hub-sys-k">TEMP</span><span class="hub-sys-v" id="hc-temp">—</span></span>
+    <span class="hub-sys-item"><span class="hub-sys-k">UP</span><span class="hub-sys-v" id="hc-up">—</span></span>
+    <span class="hub-sys-item clickable" id="hc-ctr-item" role="button" tabindex="0" title="View service status" hidden><span class="hub-sys-k">SVC</span><span class="hub-sys-v" id="hc-ctr">—</span></span>
   </div>
 
 </div>

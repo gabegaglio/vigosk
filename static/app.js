@@ -1072,6 +1072,11 @@ function openSettingsModal() {
   if (valLayout && typeof window.__kioskCurrentLayoutLabel === "function") {
     valLayout.textContent = window.__kioskCurrentLayoutLabel() || "—";
   }
+  const valWeather = document.getElementById("settings-weather-value");
+  if (valWeather) {
+    const w = _kioskConfig.weather || {};
+    valWeather.textContent = w.enabled ? (w.label || "on") : "off";
+  }
   const m = document.getElementById("settings-modal");
   if (m) m.classList.add("show");
 }
@@ -1186,6 +1191,7 @@ _wireBackBtn("widgets-modal", () => {
 let _kioskConfig = {
   ping: { gw: "", ext: "1.1.1.1", dns: "google.com" },
   containers: { interval_s: 5, max_per_cycle: 8, targets: [] },
+  weather: { enabled: false, lat: null, lon: null, unit: "c", label: "" },
 };
 // Working copy for the containers editor (committed on SAVE).
 let _ctrDraft = { interval_s: 5, max_per_cycle: 8, targets: [] };
@@ -1221,6 +1227,15 @@ function _applyConfig(cfg) {
       targets: Array.isArray(cfg.containers.targets) ? cfg.containers.targets : [],
     };
   }
+  if (cfg.weather) {
+    _kioskConfig.weather = {
+      enabled: !!cfg.weather.enabled,
+      lat: cfg.weather.lat != null ? cfg.weather.lat : null,
+      lon: cfg.weather.lon != null ? cfg.weather.lon : null,
+      unit: cfg.weather.unit === "f" ? "f" : "c",
+      label: cfg.weather.label || "",
+    };
+  }
 }
 
 async function loadKioskConfig() {
@@ -1234,6 +1249,7 @@ async function saveKioskConfig(patch) {
   const body = {
     ping: { ..._kioskConfig.ping, ...(patch.ping || {}) },
     containers: { ..._kioskConfig.containers, ...(patch.containers || {}) },
+    weather: { ..._kioskConfig.weather, ...(patch.weather || {}) },
   };
   const r = await fetch("api/config", {
     method: "POST",
@@ -1288,6 +1304,92 @@ function _formMsg(el, text, isErr) {
   el.textContent = text;
   el.className = "kform-msg" + (isErr ? " err" : " ok");
 }
+
+// ── Weather location modal ─────────────────────────────────────────
+// Draft mirrors the two toggles (enabled/unit) so a tap flips them
+// without a round-trip; the text inputs are read on SAVE. Coordinates
+// are validated client-side, but the server re-validates + clamps.
+let _wxDraft = { enabled: false, unit: "c" };
+
+function _wxSyncToggles() {
+  const en = document.getElementById("wx-enabled-btn");
+  if (en) {
+    en.textContent = _wxDraft.enabled ? "ON" : "OFF";
+    en.classList.toggle("on", _wxDraft.enabled);
+    en.setAttribute("aria-pressed", _wxDraft.enabled ? "true" : "false");
+  }
+  const un = document.getElementById("wx-unit-btn");
+  if (un) un.textContent = _wxDraft.unit === "f" ? "°F" : "°C";
+}
+
+function openWeatherModal() {
+  const w = _kioskConfig.weather || {};
+  _wxDraft = { enabled: !!w.enabled, unit: w.unit === "f" ? "f" : "c" };
+  const lat = document.getElementById("wx-lat-input");
+  const lon = document.getElementById("wx-lon-input");
+  const lbl = document.getElementById("wx-label-input");
+  if (lat) lat.value = w.lat != null ? String(w.lat) : "";
+  if (lon) lon.value = w.lon != null ? String(w.lon) : "";
+  if (lbl) lbl.value = w.label || "";
+  const msg = document.getElementById("wx-msg");
+  if (msg) { msg.textContent = ""; msg.className = "kform-msg"; }
+  _wxSyncToggles();
+  _modalShow("weather-modal");
+}
+function closeWeatherModal() { _modalHide("weather-modal"); }
+
+function _wxValidCoord(v, limit) {
+  if (v === "" || v == null) return null;      // empty ⇒ treat as unset
+  const f = Number(v);
+  if (!Number.isFinite(f) || Math.abs(f) > limit) return undefined; // invalid
+  return Math.round(f * 1e4) / 1e4;
+}
+
+(function _wireWeatherModal() {
+  const save = document.getElementById("wx-save");
+  if (!save) return;
+  const enBtn = document.getElementById("wx-enabled-btn");
+  const unBtn = document.getElementById("wx-unit-btn");
+  const stop = (e) => e.stopPropagation();
+  if (enBtn) {
+    enBtn.addEventListener("click", (e) => { stop(e); _wxDraft.enabled = !_wxDraft.enabled; _wxSyncToggles(); });
+    enBtn.addEventListener("pointerdown", stop);
+    enBtn.addEventListener("pointerup", stop);
+  }
+  if (unBtn) {
+    unBtn.addEventListener("click", (e) => { stop(e); _wxDraft.unit = _wxDraft.unit === "f" ? "c" : "f"; _wxSyncToggles(); });
+    unBtn.addEventListener("pointerdown", stop);
+    unBtn.addEventListener("pointerup", stop);
+  }
+  const onSave = async (e) => {
+    e.stopPropagation(); e.preventDefault();
+    const msg = document.getElementById("wx-msg");
+    const lat = _wxValidCoord(document.getElementById("wx-lat-input").value.trim(), 90);
+    const lon = _wxValidCoord(document.getElementById("wx-lon-input").value.trim(), 180);
+    const label = document.getElementById("wx-label-input").value.trim().slice(0, 48);
+    if (lat === undefined) { _formMsg(msg, "Latitude must be −90 to 90", true); return; }
+    if (lon === undefined) { _formMsg(msg, "Longitude must be −180 to 180", true); return; }
+    if (_wxDraft.enabled && (lat === null || lon === null)) {
+      _formMsg(msg, "Set a location to enable", true); return;
+    }
+    try {
+      await saveKioskConfig({ weather: { enabled: _wxDraft.enabled, lat, lon, unit: _wxDraft.unit, label } });
+      // Reflect any server clamp/reset (e.g. enabled forced off).
+      _wxDraft.enabled = !!_kioskConfig.weather.enabled;
+      _wxSyncToggles();
+      _formMsg(msg, "Saved ✓", false);
+    } catch (err) { _formMsg(msg, "Save failed", true); }
+  };
+  save.addEventListener("click", onSave);
+  save.addEventListener("pointerdown", stop);
+  save.addEventListener("pointerup", stop);
+  const wm = document.getElementById("weather-modal");
+  if (wm) {
+    wm.addEventListener("click", (e) => { if (e.target === wm) closeWeatherModal(); });
+    wm.addEventListener("pointerdown", stop);
+    wm.addEventListener("pointerup", stop);
+  }
+})();
 
 // ── Container health modal ─────────────────────────────────────────
 const CTR_IV_MIN = 1, CTR_IV_MAX = 600, CTR_CAP_MIN = 1, CTR_CAP_MAX = 64;
@@ -1415,8 +1517,10 @@ function closeContainersModal() { _modalHide("containers-modal"); }
 
 _wireSettingsBtn("settings-network-btn",    openNetworkModal);
 _wireSettingsBtn("settings-containers-btn", openContainersModal);
+_wireSettingsBtn("settings-weather-btn",    openWeatherModal);
 _wireBackBtn("network-modal",    closeNetworkModal);
 _wireBackBtn("containers-modal", closeContainersModal);
+_wireBackBtn("weather-modal",    closeWeatherModal);
 
 // ── Process sort controls ──────────────────────────────────────────
 // PID / CPU% / MEM% headers are tappable: first tap selects that

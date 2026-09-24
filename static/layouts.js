@@ -11,13 +11,15 @@
 // same numbers the user sees on the default panel.
 // ══════════════════════════════════════════════════════════════════
 
-const LAYOUTS = ["default", "gauges", "heatmap", "flowstrip", "minimal"];
+const LAYOUTS = ["default", "gauges", "heatmap", "flowstrip", "minimal", "hub", "hubcards"];
 const LAYOUT_LABELS = {
   default:    "DEFAULT",
   gauges:     "GAUGES",
   heatmap:    "HEATMAP",
   flowstrip:  "FLOWSTRIP",
   minimal:    "MINIMAL",
+  hub:        "HUB",
+  hubcards:   "HUB · CARDS",
 };
 const LAYOUT_CHIP = {
   default:    "DFLT",
@@ -25,6 +27,8 @@ const LAYOUT_CHIP = {
   heatmap:    "HEAT",
   flowstrip:  "FLOW",
   minimal:    "MNML",
+  hub:        "HUB",
+  hubcards:   "CARD",
 };
 
 let currentLayout = (() => {
@@ -173,6 +177,36 @@ function buildLayoutSwatch(name) {
       ledger.appendChild(col);
     }
     preview.append(vitals, ledger);
+  } else if (name === "hub") {
+    // Centred clock with an inline weather line beneath it, a quote line
+    // above the foot, and a thin vitals strip — the smart-home look.
+    const clock = document.createElement("div");
+    clock.className = "clock";
+    const wx = document.createElement("div");
+    wx.className = "wxline";
+    const q = document.createElement("div");
+    q.className = "qline";
+    const strip = document.createElement("div");
+    strip.className = "strip";
+    preview.append(clock, wx, q, strip);
+  } else if (name === "hubcards") {
+    // Two-column top — clock on the left, two stacked cards (weather ·
+    // quote) on the right — over a thin vitals strip.
+    const top = document.createElement("div");
+    top.className = "top";
+    const clock = document.createElement("div");
+    clock.className = "clock";
+    const cards = document.createElement("div");
+    cards.className = "cards";
+    for (let i = 0; i < 2; i++) {
+      const c = document.createElement("div");
+      c.className = "card-mini";
+      cards.appendChild(c);
+    }
+    top.append(clock, cards);
+    const strip = document.createElement("div");
+    strip.className = "strip";
+    preview.append(top, strip);
   }
 
   const label = document.createElement("div");
@@ -1495,6 +1529,298 @@ window.layoutOnTick = function (s, sm) {
   catch (e) { /* keep ticks resilient if minimal DOM not ready */ }
 };
 
+// ══════════════════════════════════════════════════════════════════
+// Hub layout — casual smart-home screen
+// ──────────────────────────────────────────────────────────────────
+// An oversized clock + greeting + date are the hero; a weather card
+// (opt-in, server-fetched via metrics.py) and a daily quote sit below,
+// and a single slim strip of system vitals is kept deliberately small.
+// The clock runs on its own 1 Hz timer so it stays smooth regardless of
+// the /api/stats poll cadence; the data-bound parts (weather, vitals)
+// update from the normal layoutOnTick stream.
+// ══════════════════════════════════════════════════════════════════
+
+// Bundled and fully offline — no external quote API, nothing tracked.
+// Rotated deterministically by calendar day so the same line shows all
+// day and changes at local midnight.
+const HUB_QUOTES = [
+  ["Simplicity is the ultimate sophistication.", "Leonardo da Vinci"],
+  ["The best way to predict the future is to invent it.", "Alan Kay"],
+  ["Make it work, make it right, make it fast.", "Kent Beck"],
+  ["Programs must be written for people to read.", "Harold Abelson"],
+  ["Any sufficiently advanced technology is indistinguishable from magic.", "Arthur C. Clarke"],
+  ["Perfection is achieved when there is nothing left to take away.", "Antoine de Saint-Exupéry"],
+  ["Talk is cheap. Show me the code.", "Linus Torvalds"],
+  ["First, solve the problem. Then, write the code.", "John Johnson"],
+  ["The only way to do great work is to love what you do.", "Steve Jobs"],
+  ["Premature optimization is the root of all evil.", "Donald Knuth"],
+  ["Stay hungry, stay foolish.", "Whole Earth Catalog"],
+  ["It always seems impossible until it's done.", "Nelson Mandela"],
+  ["The details are not the details. They make the design.", "Charles Eames"],
+  ["What we know is a drop, what we don't know is an ocean.", "Isaac Newton"],
+  ["Well begun is half done.", "Aristotle"],
+  ["The journey of a thousand miles begins with a single step.", "Lao Tzu"],
+  ["Quality is not an act, it is a habit.", "Aristotle"],
+  ["Everything should be made as simple as possible, but not simpler.", "Albert Einstein"],
+  ["The function of good software is to make the complex appear simple.", "Grady Booch"],
+  ["Code is like humor. When you have to explain it, it's bad.", "Cory House"],
+  ["A person who never made a mistake never tried anything new.", "Albert Einstein"],
+  ["Knowledge is of no value unless you put it into practice.", "Anton Chekhov"],
+  ["The best time to plant a tree was 20 years ago. The second best is now.", "Chinese Proverb"],
+  ["Do not go where the path may lead, go instead where there is no path.", "Ralph Waldo Emerson"],
+  ["Discipline equals freedom.", "Jocko Willink"],
+  ["The obstacle is the way.", "Marcus Aurelius"],
+  ["We suffer more in imagination than in reality.", "Seneca"],
+  ["Small deeds done are better than great deeds planned.", "Peter Marshall"],
+  ["Given enough eyeballs, all bugs are shallow.", "Linus's Law"],
+  ["Measure twice, cut once.", "Carpenter's Proverb"],
+];
+
+function _hubQuoteOfDay(ms) {
+  const day = Math.floor((ms || Date.now()) / 86400000);
+  const i = ((day % HUB_QUOTES.length) + HUB_QUOTES.length) % HUB_QUOTES.length;
+  return HUB_QUOTES[i];
+}
+
+function _hubGreeting(h) {
+  if (h < 5)  return "Good night";
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+let _hubClockTimer = null;
+let _hubLastQuoteDay = -1;
+
+// Set the same text on several elements by id (missing ones skipped) —
+// lets the clock/quote drive both the inline `hub` layout and the
+// card-based `hubcards` layout from one tick.
+function _setAll(ids, text) {
+  for (const id of ids) { const el = document.getElementById(id); if (el) _gSetText(el, text); }
+}
+
+function _hubTickClock() {
+  const now = new Date();
+  const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+  let h12 = h % 12; if (h12 === 0) h12 = 12;
+  _setAll(["hub-time", "hc-time"], h12 + ":" + String(m).padStart(2, "0"));
+  _setAll(["hub-secs", "hc-secs"], String(s).padStart(2, "0"));
+  _setAll(["hub-ampm", "hc-ampm"], h >= 12 ? "PM" : "AM");
+  _setAll(["hub-greeting", "hc-greeting"], _hubGreeting(h));
+  let dateStr = null;
+  try {
+    dateStr = now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  } catch (e) { /* locale API missing — leave prior text */ }
+  if (dateStr) _setAll(["hub-date", "hc-date"], dateStr);
+  // Roll the quote at local midnight.
+  const day = Math.floor(now.getTime() / 86400000);
+  if (day !== _hubLastQuoteDay) {
+    _hubLastQuoteDay = day;
+    const q = _hubQuoteOfDay(now.getTime());
+    _setAll(["hub-quote-text", "hc-quote-text"], "“" + q[0] + "”");
+    _setAll(["hub-quote-author", "hc-quote-author"], "— " + q[1]);
+  }
+}
+
+function _hubEnsureClock() {
+  if (_hubClockTimer) return;
+  _hubTickClock();
+  _hubClockTimer = setInterval(_hubTickClock, 1000);
+}
+
+function _hubFmtUptime(sec) {
+  sec = Number(sec) || 0;
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (d > 0) return d + "d " + h + "h";
+  if (h > 0) return h + "h " + m + "m";
+  return m + "m";
+}
+
+// Build the "feels … · H…° L…° · N% hum" detail string shared by both
+// weather presentations.
+function _hubWxMeta(wx) {
+  const parts = [];
+  if (wx.feels != null) parts.push("feels " + Math.round(wx.feels) + "°");
+  if (wx.hi != null && wx.lo != null) parts.push("H " + Math.round(wx.hi) + "° L " + Math.round(wx.lo) + "°");
+  if (wx.humidity != null) parts.push(Math.round(wx.humidity) + "% hum");
+  return parts;
+}
+function _hubWxReady(wx) { return !!(wx && wx.enabled && wx.ok && wx.temp != null); }
+
+// `hub` layout — weather as one inline line under the date.
+function _renderWeatherInline(s) {
+  const wx = s.weather;
+  const line = document.getElementById("hub-wx-line");
+  if (_hubWxReady(wx)) {
+    if (line) line.hidden = false;
+    _gSetText(document.getElementById("hub-wx-icon"), wx.icon || "🌡️");
+    _gSetText(document.getElementById("hub-wx-temp"), Math.round(wx.temp) + "°");
+    const cond = wx.text && wx.text !== "—" ? wx.text : "";
+    _gSetText(document.getElementById("hub-wx-text"), wx.label ? (cond ? cond + " · " + wx.label : wx.label) : cond);
+    _gSetText(document.getElementById("hub-wx-meta"), _hubWxMeta(wx).join(" · "));
+  } else if (line) {
+    line.hidden = true;   // off / no location / unavailable → just hide it
+  }
+}
+
+// `hubcards` layout — weather as a card, with a config hint when off.
+function _renderWeatherCard(s) {
+  const wx = s.weather;
+  const card = document.getElementById("hc-weather");
+  const off  = document.getElementById("hc-weather-off");
+  if (_hubWxReady(wx)) {
+    if (card) card.hidden = false;
+    if (off)  off.hidden  = true;
+    _gSetText(document.getElementById("hc-wx-icon"), wx.icon || "🌡️");
+    _gSetText(document.getElementById("hc-wx-temp"), Math.round(wx.temp) + "°");
+    _gSetText(document.getElementById("hc-wx-text"), wx.text || "—");
+    _gSetText(document.getElementById("hc-wx-meta"), _hubWxMeta(wx).join("   ·   ") || (wx.unit === "f" ? "°F" : "°C"));
+    _gSetText(document.getElementById("hc-wx-place"), wx.label || "");
+  } else {
+    if (card) card.hidden = true;
+    if (off)  off.hidden  = false;
+    const hint = off && off.querySelector(".hc-wx-hint");
+    if (hint) {
+      hint.innerHTML = (wx && wx.enabled && !wx.ok)
+        ? "Weather unavailable<br>retrying…"
+        : "Set a location in<br>OPTIONS → WEATHER";
+    }
+  }
+}
+
+// Shared vitals footer for both hub layouts — `p` is the id prefix
+// ("hub" or "hc"). Reads the shared _hubContainers snapshot.
+function _renderHubVitals(s, sm, p) {
+  const cpuPct  = sm && Number.isFinite(sm.cpuPct)  ? sm.cpuPct  : (s.cpu && s.cpu.avg) || 0;
+  const memPct  = sm && Number.isFinite(sm.memPct)  ? sm.memPct  : (s.mem && s.mem.percent) || 0;
+  const diskPct = sm && Number.isFinite(sm.diskPct) ? sm.diskPct : (s.disk && s.disk.percent) || 0;
+  _gSetText(document.getElementById(p + "-host"), s.host || "—");
+  const cpuEl = document.getElementById(p + "-cpu");
+  if (cpuEl) { _gSetText(cpuEl, Math.round(cpuPct) + "%"); cpuEl.style.color = _gColorForPct(Math.min(100, cpuPct)); }
+  const memEl = document.getElementById(p + "-mem");
+  if (memEl) { _gSetText(memEl, Math.round(memPct) + "%"); memEl.style.color = _gColorForPct(Math.min(100, memPct)); }
+  const diskEl = document.getElementById(p + "-disk");
+  if (diskEl) { _gSetText(diskEl, Math.round(diskPct) + "%"); diskEl.style.color = _gColorForPct(Math.min(100, diskPct)); }
+  const tempItem = document.getElementById(p + "-temp-item");
+  const t = s.cpu && s.cpu.temp_c;
+  if (t != null) {
+    if (tempItem) tempItem.hidden = false;
+    _gSetText(document.getElementById(p + "-temp"), window.__kioskFmtTemp(t));
+  } else if (tempItem) tempItem.hidden = true;
+  _gSetText(document.getElementById(p + "-up"), _hubFmtUptime(s.uptime));
+
+  // Container up/down summary (autohides with no targets).
+  const list = _hubContainers;
+  const ctrItem = document.getElementById(p + "-ctr-item");
+  if (list.length) {
+    let up = 0, down = 0;
+    for (const it of list) { if (it.up === true) up++; else if (it.up === false) down++; }
+    if (ctrItem) ctrItem.hidden = false;
+    const ctrEl = document.getElementById(p + "-ctr");
+    if (ctrEl) {
+      _gSetText(ctrEl, down > 0 ? (up + " up · " + down + " down") : (up + " up"));
+      ctrEl.style.color = down > 0 ? "var(--crit)" : "var(--good)";
+    }
+  } else if (ctrItem) ctrItem.hidden = true;
+}
+
+function _renderHub(s, sm) {
+  _hubContainers = (s.containers && Array.isArray(s.containers.list)) ? s.containers.list : [];
+  _renderWeatherInline(s);   // hub layout
+  _renderWeatherCard(s);     // hubcards layout
+  _renderHubVitals(s, sm, "hub");
+  _renderHubVitals(s, sm, "hc");
+  // Keep the services modal live while it's open.
+  if (_svcModalOpen) _renderServicesModal();
+}
+
+// ── Services status modal ──────────────────────────────────────────
+// Tapping the SVC footer item opens a read-only up/down list of every
+// configured container. Data comes from the same /api/stats snapshot
+// (_hubContainers), so it stays in sync with the footer as it ticks.
+let _hubContainers = [];
+let _svcModalOpen = false;
+
+function _renderServicesModal() {
+  const listEl = document.getElementById("svc-list");
+  const sumEl  = document.getElementById("svc-summary");
+  if (!listEl) return;
+  const items = Array.isArray(_hubContainers) ? _hubContainers : [];
+  let up = 0, down = 0, pend = 0;
+  for (const it of items) {
+    if (it.up === true) up++; else if (it.up === false) down++; else pend++;
+  }
+  if (sumEl) {
+    sumEl.innerHTML = items.length
+      ? `<span class="up">${up} up</span><span class="down">${down} down</span>` +
+        `<span class="tot">${items.length} total</span>`
+      : "";
+  }
+  if (!items.length) {
+    listEl.innerHTML = `<div class="svc-empty">No services configured —<br>add them in OPTIONS → CONTAINERS.</div>`;
+    return;
+  }
+  // Sort down-first so problems surface at the top, then by name.
+  const rank = (it) => (it.up === false ? 0 : it.up === true ? 2 : 1);
+  const rows = items.slice().sort((a, b) => rank(a) - rank(b) ||
+    String(a.name || a.host || "").localeCompare(String(b.name || b.host || "")));
+  const frag = document.createDocumentFragment();
+  for (const it of rows) {
+    const state = it.up === true ? "up" : it.up === false ? "down" : "pending";
+    const label = it.up === true ? "UP" : it.up === false ? "DOWN" : "…";
+    const row = document.createElement("div");
+    row.className = "svc-row";
+    const dot = document.createElement("span"); dot.className = "svc-dot " + state;
+    const mid = document.createElement("span");
+    const nm = document.createElement("span"); nm.className = "svc-name"; nm.textContent = it.name || it.host || "—";
+    const hs = document.createElement("span"); hs.className = "svc-host"; hs.textContent = "  " + (it.host || "");
+    mid.append(nm, hs);
+    const st = document.createElement("span"); st.className = "svc-state " + state; st.textContent = label;
+    row.append(dot, mid, st);
+    frag.appendChild(row);
+  }
+  listEl.replaceChildren(frag);
+}
+
+function _openServicesModal() {
+  _svcModalOpen = true;
+  _renderServicesModal();
+  if (typeof _modalShow === "function") _modalShow("services-modal");
+}
+function _closeServicesModal() {
+  _svcModalOpen = false;
+  if (typeof _modalHide === "function") _modalHide("services-modal");
+}
+
+(function _wireServicesModal() {
+  // Both hub layouts expose a tappable SVC footer item.
+  for (const id of ["hub-ctr-item", "hc-ctr-item"]) {
+    const openItem = document.getElementById(id);
+    if (openItem) {
+      openItem.addEventListener("click", (e) => { e.stopPropagation(); _openServicesModal(); });
+    }
+  }
+  const modal = document.getElementById("services-modal");
+  if (modal) {
+    // Backdrop tap closes; taps inside the box don't bubble out.
+    modal.addEventListener("click", (e) => { if (e.target === modal) _closeServicesModal(); });
+    const back = modal.querySelector(".modal-back");
+    if (back) back.addEventListener("click", (e) => { e.stopPropagation(); _closeServicesModal(); });
+  }
+})();
+
+const _layoutOnTick_minimal = window.layoutOnTick;
+window.layoutOnTick = function (s, sm) {
+  if (typeof _layoutOnTick_minimal === "function") _layoutOnTick_minimal(s, sm);
+  try { _renderHub(s, sm); }
+  catch (e) { /* keep ticks resilient if hub DOM not ready */ }
+};
+
+// The clock is independent of the stats stream so it never stalls.
+_hubEnsureClock();
+
 // Apply persisted layout on initial load (silent — no toast).
 applyLayout(currentLayout);
 
@@ -2715,6 +3041,8 @@ window.addEventListener("keydown", (e) => {
     case "3": e.preventDefault(); applyLayout("heatmap");   break;
     case "4": e.preventDefault(); applyLayout("flowstrip"); break;
     case "5": e.preventDefault(); applyLayout("minimal");   break;
+    case "6": e.preventDefault(); applyLayout("hub");       break;
+    case "7": e.preventDefault(); applyLayout("hubcards");  break;
   }
 }, true);
 
